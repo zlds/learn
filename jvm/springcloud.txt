@@ -1,0 +1,111 @@
+
+
+
+
+
+BFF 可以理解是一种代理适配服务，将对后端服务进行适配，包括服务聚合或裁剪，数据格式的适配，提供一个统一的API
+
+
+提示:
+	没有BFF之前，无线应用和后端服务强耦合，如接口耦合，域名耦合，任何一边变化都会对另一边造成影响。第二个问题，内部服务直接暴露到公网上面会有潜在的安全问题，有些api是涉及敏感安全数据的，不能随便暴露出去，当让可以在nginx上面做安全策略配置，但是这样很容易犯错误，容易忘记，留下潜在安全隐患。无线app端需要开发大量的聚合和裁剪适配工作，比如裁剪：后端服务返回的消息都是通用的，到了移动端不需要那么多字段需要裁剪，然后就是适配接口格式。
+
+
+
+
+基于WebFlux + Netty + Reactor实现的响应式的API网关。为微服务提供一种简单有效的API路由的管理方式，并基于Filter的方式提供网关的基本功能，例如说安全认证，监控，限流等等。
+
+
+动态路由功能的缺陷:
+	1)注册中心的服务那么多，我们并不想通过网关暴露所有的服务出去
+	2)每个服务的路由信息可能不同，会存在配置不同过滤器的情况。
+因此引入了配置中心，将配置统一存储在nacos中。同时通过nacos实时监听配置的变化，并刷新内存中的路由信息。
+
+
+CachingRouteDefinitionLocator 刷新路由定义
+CachingRouteLocator刷新路由信息
+
+
+
+
+组成部分:
+	路由: 路由id，uri请求目标的url，条件匹配，Filter过滤器组成。
+	断言: Predicates 匹配规则
+	过滤器： 可以在请求前或者请求后设置
+
+
+	uri: http://x.com # 路由到后端目标地址
+	predicates: # 匹配规则
+		- Path=/blog # 路径
+	filters:
+		- StripPrefix=1 # 去掉前缀，去前端请求http://x.com/blog，转发到后端时去掉/blog
+		- Weight=服务名称,90 分组名称 90权重比率
+
+
+
+拦截器:
+	AbstractGatewayFilterFactory
+
+限流:
+	RequestRateLimiterGatewayFilterFactory 提供请求限流的功能。
+
+	基于令牌桶算法(为什么不用漏通算法是因为有时候有突发流量)，可以配合redis实现分布式限流。
+
+
+
+	包路径: package org.springframework.cloud.gateway.filter.ratelimit;
+	接口: KeyResolver
+	添加配置config，在config中注入KeyResolver bean，重写resolve方法
+
+
+	yaml配置:
+		filters:
+			- name: RequestRateLimiter
+			  args:
+			    redis-rate-limiter.replenishRate: 1 # 令牌桶的每秒放的数量
+                redis-rate-limiter.burstCapacity: 2 # 令牌桶的最大令牌数
+                key-resolver: "#{@ipKeyResolver}" # 获取限流 KEY 的 Bean 的名字
+
+
+sentinel:
+	主要以流量为切入点，从流量控制，熔断降级，系统负载保护等多个维度来帮助用户保护服务的稳定性。
+	
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+

@@ -1,0 +1,49 @@
+为什么会出现OOM？
+答: Linux系统允许过度使用内存、如果没有过度使用内存、系统将无法充分利用其内存、从而浪费其中一部分。过度使用内存允许系统、以更有效的方式使用内存。但过度使用内存会导致OOM。
+
+什么是过度使用内存:
+答: Linux采用的是按需分配物理内存、也就是说、一般进程在启动时会申请一块很大的内存、但是实际上只使用其中的一小部分。为了不浪费资源、Linux允许进程申请超过物理内存总大小、而这种机制就叫作Overcommit。
+
+怎么看过度内存设置？
+答:
+ cat /proc/sys/vm/overcommit_memory 
+ vm.overcommit_memory可以控制是否允许使用过度内存、可选值:
+    - 0 允许overcommit、但一次性申请的内存大小超过了系统总内存、会被拒绝
+	- 1 表示总是允许overcommit
+	- 2 不允许超出(使用一个决不过量使用内存的算法)、也就是拒绝超过CommitLimit值
+	    计算公式: SWAP + (overcommit_ratio % * 物理RAM值)
+    Centos 6 默认是0、Centos 7 默认为1
+	    
+
+什么时候触发OOM Killer?
+答:	- 当物理内存+SWAP(如果开启的话)不够用时、这时在有进程申请内存、哪怕是一个页面、内核将触发OOM Killer。
+	- 如果配置了memory cgroup、进程还将受到memory cgroup的限制、如果超过了cgroup的限制、也将会触发cgroup的OOM Killer
+
+OOM Killer可以关闭吗?
+答: 可以
+    vm.panic_on_oom 此参数用来控制OOM Killer
+    可选值:
+    	0 将发生OOM Killer
+    	1 发生panic 
+    	2 立即发生panic
+
+    - 如果设置为1或者2、请设置kernel.panic = x (x为时间、参数让系统出现panic时自动重启)、如果不设置、内存不足时系统将卡死在哪里、需要手动重启
+    - 卡死界面会出现 Kernel panic - not syncing: Out of memory: system-wide panic_on_oom is enabled
+
+OOM Killer如何选择杀死那个进程?
+答: Linux系统中每个进程都有一个oom_score(路径/proc/<pid>/oom_score)、值越大、就越有可能被oom Killer掉.
+
+那oom_score怎么决定的？
+答: 有很多因素如:
+		- 进程消耗内存越大、它的oom_score通常也会越大
+		- 如果进程运行长时间运行、并且消耗很多cpu时间、说明这个程序越重要、那么通常它的oom_score会偏小
+		- 如果oom_adj小那么oom_score也会很小。
+
+怎么让系统重要的进程不被OOM Killer掉
+答: 可以设置oom_adj、取值[-17,+15]值越低被OOM Killer可能性就越小。oom_adj可以影响oom_score分数。如果重要的服务、可以设置为-17避免被OOM Killer掉
+
+其它参数:
+vm.oom_kill_allocating_task = 0(默认设置) 内核将检查所有进程的分数、分数最高的将被OOM Killer掉  
+vm.oom_kill_allocating_task = 1 内核将kill掉当前申请内存的进程
+
+

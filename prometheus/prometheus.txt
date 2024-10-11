@@ -1,0 +1,300 @@
+Prometheus
+	主要优势:
+		- 由指标名称和键/值对标签标识的时间序列数据组成的多维数据模型
+		- 强大的查询语言PromQL
+		- 不依赖分布式存储; 单个服务节点具有自治能力
+		- 时间序列数据是服务端通过HTTP协议主动拉取获得的
+		- 也可以通过中间网关来推送时间序列数据
+		- 可以通过静态配置文件或服务发现来获取监控目标
+		- 支持多种类型的图表和仪表盘
+
+多维度数据:
+	即一个监控指标metric、由多个label set、每个label就是一个组合、每个组合就是一个维度、如一个label后面跟十几个metric、就会有非常多的组合
+	
+	- node_cpu{cpu="cpu0",mode="idle"} 362812.7890625
+	node_cpu是指标名称、大括号中的标签反映了当前样本的一些特征和维度、浮点数则是该监控样本的具体值。
+															样本值
+<--------------- metric ---------------------><-timestamp -><-value->
+http_request_total{status="200", method="GET"}@1434417560938 => 94355
+http_request_total{status="200", method="GET"}@1434417561287 => 94334
+
+
+
+
+时序数据: 一串按照时间维度索引的数据。
+		 即按照相同时序(相同的名字和标签)、以时间维度存储连续的数据集合。
+
+	- 时序(time series)是有名字(Metric)、以及一组key/value标签定义的、具有相同的名字以及标签属于相同时序.	
+
+	- time-series是按照时间戳和值的序列顺序存放的、我们称之为向量(vector)、每条time-series通过指标名称(metrics name)和一组标签集(labelset)命名
+	
+	- sample:
+		1、指标(metric): metric name和描述当前样本特征的labelsets
+		2、时间戳(timestamp): 一个精确到毫秒的时间戳
+		3、样本值(value): 一个float64的浮点数据表示当前样本的值
+
+
+
+
+
+	组件:
+		- Prometheus Server作为服务端、用来存储时间序列数据。
+			直接从监控目标中或者间接通过推送网关来拉取监控指标、它在本地存储所有抓取到的样本数据、并对此数据执行一系列规则、以汇总和记录现有数据的新时间序列或生成告警。
+			- Retrieval 模块定时拉取数据
+			- storage 模块保存数据
+			- promql 提供查询语法
+		- 客户端库用来检测应用程序代码
+		- 用于支持临时任务的推送网关
+		- Exporter用来监控haproxy、statsd、graphite等特殊的监控目标、并向prometheus提供标准格式的监控样本数据
+		- alartmanager 用来处理告警		
+
+TSDB:	prometheus所有采集的监控数据均以指标(metric)的形式保存在内置的时间序列数据库当中。
+		属于同一指标名称、同一标签集合的、有时间戳标记的数据流。
+
+数据模型: 
+	度量指标(Metric): 一个数据项的名称、如http请求数、http请求时间、http请求大小
+	标签(Tag): 对于一个度量指标、可能来自不同的服务器、通过打tag、这个数据来在那台服务器。开启prometheus的多维度模型、把同一个度量指标的时序数据做区分。
+	采样值(Sample): 采集到数据、如http请求的数据
+	注解(Annotation): 通过metric和tag、来确定一个唯一值
+
+数据模型:
+	指标名和标签:
+		- 每一条时间序列有指标名称、以及一组标签(键值对)唯一标识。其中指标的名称可以反映被监控样本的含义(如 http_requests_total 表示当前系统接收到的HTTP请求总量)、指标名称只能有ascii字符、数字、下划线以及冒号组成、同时必须匹配正则表达式[a-zA-z_:][a-zA-Z0-9_:]*
+
+		冒号用来表示用户自定义的记录规则、不能在exporter中或监控对象直接暴露的指标中使用冒号来定义指标名称
+
+		指标格式分为两个部分: 一是指标名称、另外一个是指标标签。
+		<metric name>{<label name>=<label value>,.....}
+
+		__作为前缀的标签、是系统保留的关键字、只能在系统内部使用。
+
+
+
+	样本:
+		- 在时间序列中的每一个点称为一个样本(sample)、样本有以下三部分组成:
+		- 指标(metric): 指标名称和描述当前样本特征的labelsets
+		- 时间戳(timestamp): 一个精确到毫秒的时间戳
+		- 样本值(value): 一个folat64的浮点型数据表示当前样本的值
+
+	表示方式:
+		通过如下表大方式表示指标名称和指定标签集合的时间序列:
+		<metric name>{<label name>=<label value>, ...}
+
+		标签就是指标的维度信息、如status=200 status=404、可以定义各种label、定义维度
+
+
+指标类型:
+	Counter(计数器)
+	- Counter:
+		- 计数统计、累计多长或者累计多少次等。它的特点是只增不减、比如http访问总量
+		- 类型代表一种样本数据单调递增的指标、即只增不减、除非监控系统发生了重置。如可用使用counter类型的指标来表示服务的请求数、已完成的任务数、错误发生的次数等。
+
+	Guage(仪表盘):
+	- 可增可减、如内存的可用大小。
+	- Guage类型代表一种样本数据可以任意变化的指标、即可增可减。通常用于像温度或者内存使用率这种指标数据。也可以表示能随时增加或减少的"总数"、如: 当前并发请求的数量。
+
+	Histogram(直方图):
+	- 分析样本
+	- 如api调用的平均响应时间: 可用根据请求延迟分组、如统计延迟在0-10ms之间的请求、10-20之间、20-30直接、通过这种方式可用分析系统慢的原因。
+	
+	Summary(摘要):
+		- 统计
+任务和实例:
+	- 任务(Job):
+	- 实例(Instance)
+
+
+Prometheus通过HTTP接口的方式从各种客户端获取数据、这些客户端必须符合Prometheus监控数据格式、通常由两种方式、一种是侵入式埋点监控、通过在客户端集成。另外一种是通过exporter方式、在外部将原来各种中间件的监控支持转化为Prometheus的监控数据格式。
+
+Prometheus并没有采用json的数据格式、而是采用text/plain纯文本的方式
+ 
+Exporter:  向prometheus提供样本数据的程序都可以称为一个Exporter、而Exporter的一个实例称为target
+	- 在Prometheus中负责数据汇报的程序统一叫做Exporter
+	- 可以将Prometheus提供监控样本数据的程序。prometheus通过轮询的方式定期拉去样本数据。
+	- 将收集的数据、转化为对应的文本格式、并提供http请求。
+
+	针对一些常用的中间件、在外部编写一些组件、将中间件的性能指标转换prometheus能够识别的指标。
+	如mysql、redis exporter
+
+	来源:
+		- 社区提供
+		- 用户自定义
+	运行方式:
+		- 独立使用
+		- 集成到应用中: 如kubernetes、etcd等直接在代码中使用了Prometheus的Client Library、提供了对Prometheus的直接支持。		
+
+Pushgateway:
+	- Prometheus 采用pull模式、可能由于不在一个子网或者防火墙的原因、导致prometheus无法直接拉取各个target数据
+	- 在监控业务数据的时候、需要将不同的数据汇总、有prometheus统一收集
+
+	弊端:
+		- 将多个节点数据汇总到pushgateway、如果pushgateway挂了、受影响比多个target大。
+		- prometheus拉取状态up只针对pushgateway、无法做到对每个节点有效。
+		- pushgateway可以持久化推送给它的所有监控数据。因此、即使你的监控已经下线、prometheus还会拉取到旧的监控数据、需要手动清理pushgateway不要的数据
+
+
+存储:
+	本地存储:
+		- Prometheus按照两个小时为一个时间窗口、将两个小时内产生的数据存储在一个块(block)中。每个块都是一个单独的目录、里面包含该时间窗口内的所有样本数据(chunks)、元数据文件(meta.json)以及索引文件(index)
+		- 默认情况保存15天数据
+	远程存储:
+		- TSDB、infuxdb
+		- Prometheus并没有尝试自身中解决以上问题、而是通过定义两个标准接口、remote_write/remote_read、让用户可以基于这两个接口对接、将数据保存任意第三方的存储服务中。	
+
+	核心概念:
+		数据模型: 
+			- 度量指标: 如http请求数
+			- 标签: 对服务器进行打标、数据来自那台服务器
+			- 采样值: 如http请求数量
+			- 注解: 
+		度量指标: 
+			- 计数器: 保持递增的
+			- 计量器: 可变化的数据、如http请求的响应数据
+			- 直方图: 
+			- 汇总: 
+		任务和实例: 
+			- 任务: 实例的组合
+			- 实例: 
+
+CAdvisor:
+	- CAdvisor是google开源的一款用于展示和分析容器运行状态的可视化工具。通过在主机上运行CAdvisor用户可以轻松的获取到当前主机上容器的运行统计信息、并以图表的形式向用户展示
+
+
+告警:
+	- Prometheus告警配置也是通过yaml文件配置、核心是上面的expr参数(告警规则)和查询一样也是一个promql表达式。for代表持续时间、如果在for时间内持续触发、prometheus才发出告警至alertmanager
+	- 通过http请求、发送个alertmanager、然后去重、过滤、抑制。
+
+
+Prometheus配置监控对现有两种方式:
+	- 一种是通过静态文件配置
+	- 另一种是动态发现机制、自动注册监控对象。动态发现目前支持kubernetes、etcd、consul等多种服务发现机制、动态发现机制可以减少手动配置。如kubernetes环境的动态发现、通过watch kubernetes api 动态获取当前集群所有服务和容器情况、从而动态调整监控对象。
+
+联邦:
+	- 扩展单个prometheus的采集能力和存储能力、prometheus引入了"联邦"的概念。
+
+
+Prometheus 服务发现:
+	- 引入一个中间的代理人(服务注册中心)、这个代理掌握当前所有监控目标的访问信息、Prometeus只需要向代理人、询问有哪些监控目标即可
+
+
+
+
+scrape_configs: 主要用于配置拉取数据节点、每一个拉取配置主要包含以下参数
+	- job_name: 任务名称
+	- honor_labels: 用于解决拉取数据标签有冲突、当设置为true以拉取数据为准、否则以服务配置为准
+	- scrape_interval: 拉取时间间隔
+	- scrape_timeout: 拉取超时时间
+	- metrics_path: 拉取节点的metric路径
+	- secheme: 拉取数据访问协议
+	- sample_limit: 存储的数据标签个数限制、如果超过限制、该数据将被忽略、不入存储。默认为0、表示没有限制。
+	- relabel_configs: 拉取数据重置标签配置
+	- metric_relabel_configs: metric重置标签配置
+
+remote_write 主要用于可写远程存储配置
+	- url: 访问地址
+	- remote_timeout: 请求超时时间
+	- write_relabel_configs: 标签重置配置、拉取到的数据、经过重置处理后、发送给远程存储
+
+target 数据源、配置分为静态配置和动态发现:
+	- static_configs: 静态服务发现
+	- dns_sd_configs: DNS服务发现
+	- file_sd_configs: 文件访问发现
+	- kubernetes_sd_configs: Kubernetes 服务发现
+
+
+
+
+
+
+	- 多机房、多节点
+
+
+
+
+scrape_interval 参数表示的是prometheus从各种metrics接口抓取指标数据的时间间隔。
+evaluation_interval参数表示的是prometheus对报警规则进行评估计算的时间间隔.
+
+
+Prometheus 告警步骤:
+	alertmanager是一个独立的告警模块，接受prometheus等客户端发来的警报、之后通过分组、删除重复等处理。并将它们通过路由发送给正确的接收器、告警方式可以按照不同的规则发送给不同的模块负责人、alertmanager支持email、钉钉等告警方式。
+
+
+
+Alertmanager报警组件:
+	- 分组:
+		分组是指将同一类型的警报分类为单个通知。意思就是说:如我们有100台实例、如果网络发生故障时、有可能一半的服务实例不能访问、如果prometheus告警规则为每一个服务实例都发送警告的话、那么结果是数百警报被发送至alertmanager、但是作为用户只想看到一个告警、同时仍然能够清楚的看到那些实例受到影响、因此可以通过配置alertmanager将警告分组打包、并发送一个相对看起来紧凑的通知。
+
+	
+	抑制:
+		是指当警告发出后、停止重复发送由此警告引发其他错误的警报的机制。
+
+	沉默:
+		silences是一种家的			
+
+
+
+
+
+
+
+模板语法:
+	{{ $lable.<lablename> }}
+	{{ $value }} 变量可以获取当前PromQL表达式的计算样本值
+	
+
+
+
+
+
+route:
+  // 标签列表是接收者收到报警信息后的重新分组标签、如:接收到的报警信息里面有许多具有cluster=A和alertname=LatncyHigh这样的标签报警信息将会被批量聚合到一个分组里面.	
+  group_by: ['alertname','cluster','service']  
+  group_wait: 10s  出现报警之后等待多次时间将多个报警合并一起发送。
+  group_interval: 10s   # 两组告警的间隔时间
+  repeat_interval: 10m  # 重复告警的间隔时间
+  #receiver: 'web.hook'
+  receiver: 'default-receiver'  # 如果一个报警没有被一个route匹配，则发送给默认的接收器
+
+
+
+
+
+
+
+
+
+rule:
+	groups:
+	- name: <string>  警告规则组的名称
+	rules:
+	- alert: <string>  警告规则的名称
+	  expr: <string>
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+Falcon-agent
+	是用Go语言开发的Daemon程序、运行在每台Linux服务器上、采集主机上的各种指标数据、主要包括: CPU、内存、磁盘、文件系统、内核参数、Socket连接等
+
+Hearthbeat server 简称HBS心跳服务
+	每个Agent都会周期性地通过RPC方式将自己的状态上报给HPS、主要包括主机名、主机IP、agent版本和插件版本。
+
+Transfer
+	负责接收Agent发送的监控数据、并对数据进行整理、在过滤后通过一致性Hash算法发送到judge或Graph
+
+GR	

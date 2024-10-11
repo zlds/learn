@@ -1,0 +1,132 @@
+1、解压安装：
+   uname -a 查看Linux内核版本
+   make TARGET=linux26  USE_OPENSSL=1 ADDLIB=-lz PREFIX=/usr/local/haproxy #将haproxy安装到/usr/local/haproxy 并开启ssl
+   make install PREFIX=/usr/local/haproxy
+2、安装完毕后，进入安装目录配置文件，默认情况下目录里是没有.cfg配置文件的，可以回到安装文件目录下将examples下的haproxy.cfg
+拷贝到usr/local/haproxy下。
+
+
+
+option http-keep-alive 默认 保持空闲连接
+option httpclose 短连接
+option http-server-close  客户端保持空闲连接、后端短连接
+option forceclose 
+
+haproxy 默认为单进程、如果要使用多核cpu、必须进程cpu绑定
+global
+    nbproc 4
+    cpu-map 1 0 1表示进程 0表示cpu核心
+    cpu-map 2 1
+    cpu-map 3 2
+    cpu-map 4 3
+
+ frontend access_http
+   bind 0.0.0.0:80
+   bind-process 1
+frontend access_https
+   bind 0.0.0.0:443 ssl crt /xxx.pem
+   bind-process 2 3 4
+
+
+make TARGET=linux26 USE_OPENSSL=1 SSL_INC=/usr/local/ssl/include/ SSL_LIB=/usr/local/ssl/lib/ ADDLIB=-ldl
+make install PREFIX=/usr/local/haproxy
+
+cp /usr/local/haproxy/sbin/haproy /usr/local/sbin/haproxy
+
+
+haproxy -f xxx -c 检查配置文件是否正确
+
+
+
+
+HAProxy的算法有如下8种：
+
+一、roundrobin，表示简单的轮询；
+
+二、static-rr，表示根据权重，建议关注；
+
+三、leastconn，表示最少连接者先处理，建议关注；
+
+四、source，表示根据请求源IP，建议关注；
+
+五、uri，表示根据请求的URI；
+
+六、url_param，表示根据请求的URl参数'balance url_param' requires an URL parameter name
+
+七、hdr(name)，表示根据HTTP请求头来锁定每一次HTTP请求；
+
+八、rdp-cookie(name)，表示根据据cookie(name)来锁定并哈希每一次TCP请求。
+
+其实这些算法各有各的用法，我们平时应用得比较多的应该是roundrobin、source和lestconn，大家可以重点关注下。
+
+http://a280606790.iteye.com/blog/1095085 HTTP协议头部与Keep-Alive模式详解
+
+http://cbonte.github.io/haproxy-dconv/configuration-1.5.html 
+
+
+
+
+PEM BASE64编码、开头BEGIN/END结尾
+DER 二进制格式
+
+
+
+openssl ciphers -v   查看支持的密钥套件、根据优先级。
+
+证书合并配置:
+在创建了证书之后，我们需要创建 pem 文件。pem 文件本质上只是将证书、密钥及证书认证中心证书（可有可无）拼接成一个文件。在我们的例子中，我们只是简单地将证书及密钥文件并以这个顺序拼接在一样来创建 xip.io.pem 文件。这是 HAProxy 读取SSL证书首选的方式。
+
+$ sudo cat /etc/ssl/xip.io/xip.io.crt /etc/ssl/xip.io/xip.io.key | sudo tee /etc/ssl/xip.io/xip.io.pem
+
+
+证书链合并
+
+cat 域名.crt + issuer.crt + cross.crt + root.crt + 域名key  
+ 
+
+当购买真正的证书 时，你不一定会获取拼接后的文件。你可以要自己拼接它们。然而，很多机构也会提供一份拼接好的文件给你。如果你没有获取到拼接后的文件，则它可能不是一个 pem 文件，而是 bundle、cert、cert、key文件或一些相同概念但名称类似的文件。这个 Stack Overflow 答案对问题解释得很好。
+
+无论如何，只要我们得到了 HAProxy 使用的 pem 文件，我们只需经过简单配置就是可以处理SSL连接了。
+
+
+
+bind *:443 ssl crt /xxxx/cert.pem no-sslv3 禁用sslv3
+
+- haproxy中可以通过 tune.ssl.lifetime 设置过期时间、默认为300秒(5分钟)
+
+
+https://www.juniper.net/techpubs/en_US/junos10.4/topics/usage-guidelines/interfaces-configuring-gratuitous-arp.html 关闭apr缓存
+
+
+Keepalived 
+三个模块：core模块为keepalived的核心、负责主进程的启动、维护以及全局配置文件的加载和解析。check负责健康检查。vrrp实现vrrp协议的。
+
+
+
+
+haproxy vs nginx
+  - haproxy 只能做为负载均衡、和反向代理、不能做web server
+  - haproxy 支持更多的负载均衡算法
+
+  - nginx上手容易、模块化更好、和lua之间耦合比较紧密
+  - haproxy 在转发性能上略胜一筹。
+
+从定位上来说、nginx重点是web服务器、替换apache、同时具备lb的作用、haproxy是单纯的lb。
+从架构上讲、进程模型不一样、haproxy是单进程方式无法充分利用多核、nginx是多进程模式
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+

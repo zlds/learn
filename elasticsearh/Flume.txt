@@ -1,0 +1,91 @@
+Flume
+	- 是一种分布式、可靠且可用的服务、用于有效的收集、聚合大量日志数据。
+	- 本质上是对数据流的处理、其定义数据处理的最小单元是event。
+
+	组件:
+		1. source 专门用来收集数据的
+		2. channel 将收的数据临时存放在channel中、
+		3. sink 是用于把数据发送到如: HDFS. file hbse solr
+
+	- agent由source channel 和 sink组成。
+		- source 负责消费从上游节点获取events、并将其放到channel。
+		- channel 有两种类型:
+			1. memory channel 适合高吞吐量场景
+			2. file channel 数据会同步到硬盘里
+
+	可靠性传输: 每个event只有当被确认传递到下游节点或者数据沉积池之后才把该event从channel中删除。
+	
+	节点出现故障时:
+		- end-to-end
+			收集数据agent首先将event写到磁盘上、当数据传送成功后、再删除。如果数据发送失败、可以重新发送。
+		- store on failure
+			当数据接收方crash时、将数据写到本地、待恢复后、继续发送。
+		- best effort
+			数据发送到接收方后、不会进行确认				
+
+Flume 流程
+	- source 从数据源收集过来、再将收集到的数据送达到指定的目的地sink。为了保证传输过程一定会成功、会先缓存数据(channel)、待数据被确认接到到之后、再删除数据。
+
+Logstash 
+	- 日志采集、解析
+
+	- Grok 过滤、排除 去重
+
+	组件:
+	- Shipper 负责日志收集。监控本地日志文件变化
+	- Broker 可以看作是日志收集线器、可以连接多个Shipper和多个indexer
+	- Indexer 负责日志存储。
+
+	缺点:
+		- 性能损耗
+
+	- 配置文件
+		queue.type: persisted 持久化到磁盘。 默认情况下是内存队列、如果主机发生宕机或者进程意外终止、则内存中的数据会丢失。
+		path.queue: /usr/xx  存储目录
+		path.pae_capacity:  250MB 最大队列
+		queue.checkpoint.writes: 1024 
+
+	- 配置
+		input {
+			输入
+		}
+		filter {
+			过滤
+		}
+		output {
+			
+			输出
+		}	
+
+FileBeat
+	- 轻量级的日志采集器
+
+	优点:
+		- 暂用资源很少
+
+
+Flume  vs Logstash
+	- Flume 只是数据传输、几乎没有数据的解析预处理。
+	- Flume 可靠性:
+		数据会持久化在channel中、数据只有在存储在下一个存储位置、数据才会从当前的channel中删除。这个过程是通过事务来控制的、这样就保证了数据的可靠性。
+
+
+日志系统引用消息队列的作用:
+	- 大并发情况下、由于日志传输峰值比较大、没有消息队列来做缓冲、就会导致elasticsearch丢失数据。
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+

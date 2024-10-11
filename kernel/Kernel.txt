@@ -1,0 +1,676 @@
+#vim /etc/sysctl.conf
+
+
+1.客户端向server发送SYN(状态SYN_SEND)
+2.server回复SYN+ACK、同时将这个处于SYN_RECV状态的连接保存到半连接队列。
+3.客户端返回ACK完成三次握手、server将ESTABLISHED状态的连接移入accept队列、等待应用调用accept()。
+
+半连接队列、保存SYN_RECV状态的连接。队列长度由net.ipv4.tcp_max_syn_backlog设置
+accept队列、保存ESTABLISHED状态的连接。队列长度为min(net.core.somaxconn.backlog)
+
+
+MTU:
+    最大传输单元、即物理接口(数据链路层)提供给其上层最大一次传输数据的大小。
+    L3 根据L2设备来决定大小 缺省以太网MTU=1500
+
+TCP是一个面向字节流的协议、不限制应用程序传输消息的长度。但是TCP的下层、网络层和数据链路层、他们的内存有限、所以会限制报文的长度。因此TCP会将接收的字节流拆分成数据段。
+
+MSS分段的依据:
+  - MSS最大大小: 防止IP层分段  ip层效率低下、就是说丢掉一个、需要全部重传。
+  - 流控: 接收端的能力
+
+MSS: Max  Segment Size
+  - 定义: 仅指TCP承载数据、不包含TCP头部的大小
+    MSS = MTU - IP首部 - TCP首部大小
+    最大报文段大小L4 MSS和MTU功能基本一致、都可以根据对应的包大小进行分片。L3是提供的是不可靠的传输、任何一个包传输丢失、L3是无法发现的、假设一个大的数据被分片、中间丢失一个分片、无法组合出完整的ip包、也无法做到仅重传丢失的分片、只能重新传送整个包。L4提供的是一个可靠的传输方式、TCP自身实现了重传机制、丢失任何一个数据分片都能单独重传、而且还可以避免被L3分片。大小是根据MTU计算得出的。既可以保证传输可靠性、又提高传输效率。
+
+
+MSS的选择目的:
+
+  默认MSS: 536字节 (怎么来的呐: 是因为 默认MTU576字节、20字节ip头部、20字节TCP头部)
+  握手阶段协商
+  分类:
+    SMSS  发送方报文段
+    RMSS  接收方报文段
+
+
+Sequence 序列号/ACK 序列号
+  设计的目的:  解决应用层字节流的可靠发送
+    - 跟踪应用层的发送端是否送达
+    - 确定接收端有序的接收到字节流
+  序列号的值针对的是字节而不是报文  
+
+TCP  头部
+序列号 复用
+  - 最大是42亿
+
+  32位序列号
+  32位确认号
+
+  16位源端口号
+  16位目标端口
+  16位窗口大小
+
+  控制位:
+    RST ACK SYN FIN PSH .....
+
+IP 头部:
+  版本 4位
+  源IP地址 32位
+  目标IP地址32位
+  标识 标志 分片偏移
+
+  生存期TTL 8为
+  协议 8 位
+  头部校验和 16位
+
+
+
+PAWS 序列号回绕
+  - Timestamps  通过时间戳、发送时带上时间戳  
+
+TCP timestamp
+  - 更精准的计算RTO
+  - PAWS  
+
+滑动窗口:    发送数据、重传数据、还要考虑接收方的处理能力
+  
+  - 在任意时刻、发送方都维持一个连续的允许发送的数据大小窗口、称为发送窗口
+  - 接收方维护一个连续的允许接收的数据大小窗口、称为接收窗口。
+
+
+部分:
+  1. 已发送并收到Ack确认的数据
+  2. 已发送未收到Ack确认的数据 Send window
+  3. 未发送但总大小在接收方处理范围内  可用窗口 Usable Windows
+  4. 未发送但总大小超过接收方处理范围
+
+  - 发送窗口: 2 + 3
+  - SND.WND 发送窗口
+  - SND.UNA 一个指针、已发送、但是还未经确认的位置
+  - SND.NXT 可用窗口的第一个字节
+
+  接收窗口:
+    - RCV.WND 接收窗口
+    - RCV.NXT  已经接收的、下一个要接收的位置
+
+
+TCP 是按字节序列号来进行确认的
+
+
+
+IP分片
+  分片主体:
+    - 源主机
+    - 路由器
+  重组主体
+    - 目标主机  
+
+
+许可的窗口=Min(通知窗口、拥塞窗口)
+
+rwnd 接收窗口、包含能够保存数据的缓冲区空间大小信息。告诉对方能吃几碗饭、
+cwnd 拥塞窗口大小 用来表示发送方在得到接收方确认前、最大允许传输未经确认的数据。
+
+流量控制:  是一种预防发送方过多的向接收方发送数据的机制。
+  - 否则、接收端可能因为忙碌、负载重或缓冲区既定无法处理。
+  - 如果其中一端跟不上数据传输、可以向发送端通告一个较小的窗口。每个ACK都会携带最新的rwnd值。接收端告知发送端还有多少缓冲区可以接收数据。于是发送端就可以根据这个接收端的处理能力来发送数据，而不会导致接收端处理不过来。
+
+
+sysctl net.ipv4.tcp_available_congestion_control
+
+快速重传: 
+    不已时间驱动、而已数据驱动重传。如果、包没有连续到达、就ack最后那个可能被丢了的包、如果发送方连续收到3次相同的ack、就重传。
+
+    好处是不用等timeout了在重传。
+
+    示例: 如果发送发给发出了1、2、3、4、5份数据、第一份先送到了、于是就ack回2、结果2因为某些原因没收到、3到达了、于是还是ack回2、后面的4和5都到了、但是还是ack回2、因为2还是没有收到、于是发送端收到了三个ack=2的确认、知道了2还没有到、于是就马上重传2。然后、接收到了2、此时因为3,4,5都收到了、于是ack回6
+
+SACK - 选择性确认
+  sack_permitted 存在于syn中、用于表示是否支持sack
+  sack 告诉对方已经接收到并缓存的不连续的数据块、注意都是已经接收的、发送方可根据此信息检查究竟是哪个丢失、从而发送相应的数据块
+
+
+Duplicate SACK 重复收到数据的问题
+  其主要使用了SACK来告诉发送方有哪些数据被重复接收了
+
+
+Linux Kernel TCP :
+net.ipv4.ip_local_port_range = 1024 65535
+                端口范围。默认32768-61000
+
+net.ipv4.tcp_window_scaling
+                默认启用1。缩放tcp窗口   
+
+net.ipv4.tcp_sack = 1
+                可以让发送者只发送丢失的报文
+
+net.ipv4.tcp_slow_start_after_idle = 0 
+                 SSR(slow-start restart慢启动重启)机制。这种机制会在连接空闲一定时间后重置连接的拥塞窗口。对于长连接有很大影响、所以这里我们关闭。
+
+net.ipv4.tcp_no_metrics_save = 1  
+                 关闭路由缓存。在关闭时不缓存
+
+net.ipv4.tcp_abort_on_overflow 
+                 默认0
+                 0：表示当backlog队列已满时、新来的SYN请求、server不予理会(过段时间在发送syn+ack给client)、那么客户端会重发SYN、那时backlog队列已经恢复。server过一段时间再次发送syn+ack给client
+                 1：表示当backlog队列满的时候、新来的SYN、服务器会直接返回RST。    
+
+net.ipv4.tcp_syncookies = 1
+                 表示开启SYN Cookies。当出现SYN等待队列溢出时，启用cookies来处理，可防范少量SYN攻击，默认为1，表示开启;
+
+net.ipv4.tcp_max_syn_backlog =  默认128(centos 7) centos6 512
+                 半连接队列。保存SYN_RECV状态连接 
+
+net.core.somaxconn = xxx
+                  accept队列。保存ESTABLISHED连接状态
+
+net.core.netdev.max_backlog
+                  当网络接口接收数据包、超过内核处理速度时、可以排队的最大数。
+
+net.ipv4.tcp_tw_reuse = 1
+                  表示开启重用。允许将TIME-WAIT sockets重新用于新的TCP连接，默认为0，表示关闭；
+
+                  从协议设计上来看、对于TIME-WAIT状态的sockets重用到新的TCP连接上来说、是安全的。
+
+                  第一个是TCP发送方的当前时钟时间戳、而第二个是从远程主机接收到的最新时间戳。
+
+                  如果新的时间戳、比以前存储的时间戳更大、那么Linux将会从TIME-WAIT状态的存活连接中、选取一个、从新分配给新的、连接tcp连接
+
+net.ipv4.tcp_tw_recycle = 1
+                  表示开启TCP连接中TIME-WAIT sockets的快速回收，默认为0，表示关闭
+                  不推荐启用: 在NAT网络下、会导致大量的TCP连接建立错误
+
+                  基于timestramp时间戳、如果时间戳小于上次记录的时间戳的任何数据包、将会放弃。
+                  当远程主机处于NAT网络中时、时间戳在一分钟之内、将禁止NAT网络后面的连接。因为每个主机都有各自的时间戳。
+net.ipv4.tcp_fin_timeout
+                FIN2 TIMEOUT 时间。
+
+tcp_orphan_retries 设置本地关闭tcp连接时、超时重试次数. 对应的就是FIN_WAIT_1  默认为8
+                   TCP_FIN_WAIT2 TCP_LAST_ACK TCP_ClOSING
+
+net.ipv4.tcp_retries2
+                  控制内核向已经建立连接的远程主机重新发送数据的次数，低值可以更早的检测到与远程主机失效的连接，因此服务器可以更快的释放该连接，可以修改为5
+
+net.ipv4.tcp_syn_retries = 3
+                  本地发起请syn、重试次数
+
+net.ipv4.tcp_synack_retries = 3
+                  本地回应对端syn+ack重试次数
+
+net.netfilter.nf_conntrack_max = 655350
+                  连接跟踪表的大小
+                  nf_conntrack用于跟踪一个连接状态。最常见的两个使用场景是iptables的nat和state模块
+          注意事项: 超过时 kernel: nf_conntrack: table full, dropping packet.  将拒绝连接
+
+net.netfilter.nf_conntrack_tcp_timeout_established = 1200                  
+            
+net.ipv4.tcp_keepalive_time = xxx
+                  表示当keepalive起用的时候，TCP发送keepalive消息的频度。缺省是2小时.
+
+net.ipv4.tcp_max_tw_buckets = 6000
+                  表示系统同时保持TIME_WAIT的最大数量，如果超过这个数字，TIME_WAIT将立刻被清除并打印警告信息。默认为180000。
+
+net.bridge.bridge-nf-call-iptables = 1
+          桥数据包将遍历iptables规则
+          使用iptables过滤docker容器之间的流量。
+
+
+
+
+TIME-WAIT 主要影响大量连接的服务器:
+  time-wait会占用端口
+
+  当后端端口不够用时、解决方法:
+    - 修改net.ipv4.ip_local_port_range 参数、增加客户端端口可用范围
+    - 增加服务端端口、多监听一些端口
+    - 增加客户端ip、尤其是作为负载均衡服务器时、使用更多ip去跟后端的web服务器通信
+    - 增加服务端ip
+
+
+TIME-WAIT 作用:
+  - 防止上一个TCP连接的延迟的数据包(发起关闭、但关闭没完成)
+  - 保证TCP连接的远程被正确关闭、即等待被动关闭连接的一方收到FIN对应的ACK消息
+
+  - 当最后一个ACK丢失时、远程连接进入LAST-ACK状态、它可以确保远程已经被关闭当前TCP连接。如果没有time-wait状态、当远程仍认为这个连接是有效的、则会继续与其通信、导致这个连接会被重新打开。
+
+  协议安全:
+  - TIME-WAIT的第一个作用是避免新的连接(不相关的) 接收到重复的数据包。用于使用了时间戳、重复的数据包会因为timestamp 过期而丢弃
+  - 确保远程端、是不是在LAST-ACK状态。因为有可能丢ACK包丢。远程端会重发FIN包、直到 1、放弃(连接断开)2、等到ack包 3、收到RST包
+
+
+
+FIN_WAIT_1:
+  由主动关闭一方发起、fin时产生
+  tcp_orphan_retries 控制fin时间 默认为0 也就是8次
+FIN_WAIT_2:
+   发送fin1之后、收到了ack
+  由tcp_fin_timeout 控制、默认60S
+TIME_WAIT:
+  主动关闭一方、收到了被动一方fin包、并回应ACK之后的状态
+
+CLOSE_WAIT:
+  被动关闭一方、接收到了fin、并回应ack之后的状态
+LAST_ACK:
+  被动一方发送fin之后的状态
+
+CLOSED:
+  被动关闭一方、主动发送fin后、并收到了ack之后的状态、表示连接关闭
+
+
+
+
+[root@server ~]# ss -lnt
+Recv-Q Send-Q Local Address:Port  Peer Address:Port 
+0        50               *:3306             *:* 
+
+上面的第二列Send-Q表示第三列的listen端口上的全连接队列最大为50
+第一列Recv-Q为全连接队列当前使用了多少
+
+
+TCP_TIMEWAIT_LEN (60*HZ)
+
+
+控制是否允许超额内存申请 Linux是允许申请超额内存的
+内存分配策略: Memory Overcommit(所有进程使用的虚拟内存超过了系统的物理内存和交换空间的总和)
+vm.overcommit_memory :  针对的是内存申请、内存申请不等于内存分配、内存只在实际用到的时候才分配
+      可选值：0、1、2  默认是0
+      0: 
+        允许overcommit、但一次性申请的内存大小超过了系统总内存、会被拒绝
+        申请内存时做check、内核将检查是否有足够内存供应应用进程使用、如果有足够的可用内存、内存申请允许、否则、内存申请失败、并把错误返回给应用程序。
+        
+      1: 
+        表示总是允许overcommit
+        申请时不做check、允许超过CommitLimit 即允许分配所有的物理内存、而不管当前的内存状态如何。
+      2: 
+        不允许超出(使用一个决不过量使用内存的算法)
+        拒绝超过CommitLimit  
+        系统内存空间不能超过 SWAP + (overcommit_ratio % * 物理RAM值)
+
+      CommitLimit: 定义如果所有进程申请的总内存超过了CommitLimit、那就算是overcommit了。
+      cat /proc/meminfo 中可以查看CommitLimit的大小
+      CommitLimit = SWAP + (overcommit_ratio % * 物理RAM值)
+ 
+
+vm.overcommit_ratio
+该文件表示，可以过载内存的百分比，通过以下公式来计算系统整体可用内存(overcommit_memory=2启用时生效)
+系统可分配内存=SWAP + (overcommit_ratio % * 物理RAM值)
+缺省设置：50（%）
+
+
+防止OOM-killer:
+  - /proc/xxx/oom_score 当前进程的优先级、数字越大被oom killer可能性就越高
+  - /proc/xxx/oom_score_adj 改变进程优先级、取值-1000到1000
+  - /proc/xxx/oom_adj RHEL系统-16到15 -17则为该进程禁用oom_killer 
+
+- oom-killer 根据进程的oom_score来确定先杀死那个进程、每一个进程都有一个oom_score、值越大被oom killer可能性就越高。
+- oom_score的值有很多因素共同决定: 这个值是系统综合进程的内存消耗、cpu时间、存活时间、和oom_adj计算出来的
+  * 如进程消耗的内存越大、它的oom_score通常也会越大
+  * 如果进程运行了很长时间、并且消耗了很多cpu时间、那么通常它的oom_score会偏小
+  * 如果进程以root用户身份运行、那么它的oom_score也会比普通用户进程的oom_score偏小
+  * oom_adj如果很小、那么oom_score也会偏小
+
+通过设置oom_adj可以来防止重要进程被killer掉、每个进程都有一个oom_adj值的范围是[-17,15]、oom_adj会影响到oom_score的计算、oom_adj的值越小被oom killer的机会就比较小、可以设置为-17来禁用oom_killer.  
+
+
+kernel panic:
+  - 是内核错误、系统内核在遇到内部的致命错误、并无法安全处理此错误时采取的动作。概念主要被限定在unix以及类Unix系统中。对于windows系统、等同的概念通常被称为蓝屏死机。
+  - 是内核错误、系统内核遇到无法处理的致命错误时才会产生的异常。
+vm.panic_on_oom = 1 内核panic  2 是立即发生恐慌 0 是oom-killer
+kernel.panic = x 设置panic多久之后重启系统
+
+
+vm.swappiness = 60
+数值越大越倾向于使用swap、
+   100-60=40: 
+        表示当物理内存低于40%时、开始使用交换空间
+   为0: 
+     时最大限度使用物理内存、然后才是swap空间、即在内存不足的情况下-当剩余空闲内存低于vm.min_free_kbytes时、使用交换空间。
+   可以设置为1
+ 
+
+什么时候使用swap?
+答: 1、vm.swappines = xx 也就是说、当物理内存低于xx时、使用交换空间
+    2、当物理内存不足、将一些不活跃的内存页、调度到swap中
+
+
+vm.zone_reclaim_mode 
+      可选值：0、1
+      0：如果为0、系统会倾向于从其他节点分配内存
+      1：如果为1的话、系统会倾向于从本地节点回收Cache内存、多数时候
+
+
+/proc/sys/fs/file-max  
+      查看系统最大文件句柄数、这个值是可以改的。默认是内存大小的10%
+      系统最大打开文件描述符
+/proc/sys/fs/file-nr 
+      查看当前使用的文件描述符
+/proc/sys/fs/nr_open
+      单个进程可分配文件数 1024*1024
+/proc/sys/vm/max_map_count
+      进程拥有VMA(虚拟内存区域)的数量。虚拟内存区域是一个连续的虚拟地址空间区域。
+
+
+http://man7.org/linux/man-pages/man7/tcp.7.html sysctl.conf
+http://edsionte.com/techblog/archives/4297 cpu时间
+
+
+
+tcpdump -w /path/to/log -i eth0 host <CLIENTIP> and port 80
+TCP 抓包常见错误
+tcp out-of-order（tcp有问题）                   #多数是网络拥塞引起的
+tcp segment of a reassembled PDU                 #TCP 分片标识
+Tcp previous segment lost（tcp先前的分片丢失）
+Tcp acked lost segment（tcp应答丢失）
+Tcp window update（tcp窗口更新）
+Tcp dup ack（tcp重复应答）
+Tcp keep alive（tcp保持活动）
+Tcp retransmission（tcp 重传）
+
+
+
+Linux 获取进程已经运行的时间
+[root@localhost]# ps -p 4260 -o pid,start_time,etime,comm
+  PID START     ELAPSED COMMAND
+ 4260 Apr18 16-08:57:25 gnome-session 
+
+hwclock：-s 以硬件为准 -w 以系统为准
+
+
+curl ifconfig.me linux 查看本地上网ip
+
+lsof -a -p (pid)  查看一个进程打开的文件信息
+ps   -Lf   (pid)  查看进程线程数
+pmap -x    (pid)  查看进程的内存占用信息
+
+
+
+字节是计算机信息技术用于计量存储容量的一种计量单位，也表示一些计算机编程语言中的数据类型和语言字符。
+硬盘生产商是以GiB(十进制、即10的3次方=1000)计算。
+操作系统是以GB(二进制、即2的10次方)
+数据存储是以字节(Byte)为单位、数据传输是大多是以位(bit)为单位。
+
+1GB=1024MB
+1MB=1024KB 
+1KB=1024B字节 
+1B(byte/字节)=8(bit/位) 
+
+
+tcp_tw_recycle 回收：
+不需要等待2 MSL时间、
+
+
+
+
+sk_buffer Linux网络模块中最重要的数据结构之一、用以描述已经收或待发送的数据报文信息。
+
+1348999
+http://colobu.com/2014/09/18/linux-tcpip-tuning/
+
+http://www.wangchao.net.cn/bbsdetail_64490.html
+
+http://support.huawei.com/ecommunity/bbs/10244257.html?auther=1&buildingowner=10114021
+
+
+
+vfs 虚拟文件系统层:
+  内核要跟多种文件系统打交道、而每一种文件系统所实现的数据结构和相关方法都可能不尽相同、所以、内核抽象了这一层、专门用来适配各种文件系统、并对外提供统一的操作接口。
+
+
+
+screen 虚拟屏幕
+
+升级 OR 优化内核：
+1、查看当前内核版本：uname -r  or cat /proc/version
+下载最新或者要升级的kernel软件包如下：
+linux-2.6.32.tar.bz2 
+解压tar jxvf linux-2.6.32.tar.bz2 -C /usr/src/
+ mv linux-2.6.32 linux
+ 修改要优化kernel的参数如网络参数 /usr/src/linux/include/net/tcp.h
+
+2、将当前系统的配置文件拷贝到当前目录：cp /boot/config-2.6.32-358.11.1.el6.x86_64 .config
+3、使用旧内核配置，并自动接受每个新增选项的默认设置：sh -c 'yes "" | make oldconfig'
+make oldconfig会读取当前目录下的.config文件，在.config文件里没有找到的选项则提示用户填写，然后备份.config文件为.config.old，并生成新的.config文件
+4、编译： make menuconfig #自定义加载模块
+         make bzImage #生成内核文件
+         make  modules #编译模块
+         make  modules_install #编译安装模块 
+           (make clean        #确保所有东西均保持最新状态.)
+
+5、安装：
+         make install
+6、修改Grub引导顺序：vim /etc/grub.conf
+                       default 0
+
+
+
+ip route | while read p; do  ip route change $p initcwnd 10; done  
+
+
+
+Linux Disk:
+            块设备: 随机读取
+            字符设备: 按顺序读取
+            cat /sys/block/sda/queue/scheduler 查看磁盘调度算法
+
+Write-through 同步写入缓存和后台存储
+Write-back 回写模式数据更新只写入缓存cache。
+Buffer IO:
+           操作系统会将I/O的数据缓存在文件系统的页缓存(page cache)中、就是说、数据会被拷贝到操作系统内核的缓冲区。
+           减少读盘的次数
+           写IO对操作系统而言、有writeback(先写入到内存中、一段时间后、由内核线程写入到磁盘)
+  缺点: 断电后数据可能丢失。
+Direct IO:
+           不会经过page cache。不会和内存打交道、而是直接写入到存储设备中。
+
+第一步:
+  读取系统调用从用户模式切换到内核模式。然后有DMA引擎执行、该引擎从磁盘读取文件并将其存储到内核地址空间缓冲区中
+第二步:
+  将数据从内核缓冲区复制到用户空间、然后读取的系统调用返回。这是会从内核模式切换回用户模式。
+第三步:
+  写系统调用导致上下文从用户模式切换到内核模式。执行第三次复制再次将数据放入到内核地址空间。但是、这次将数据放入到另一个缓冲区中、改缓冲区专门与套接字关联。
+第四步:
+  write系统调用返回、创建我们的第次次上下文开关。独立且异步地、当DMA引擎将数据从内核缓冲区传递到协议引擎时、发送第四次复制。  
+
+
+sendfile:
+         在内核级别完成文件拷贝。
+   传统:
+         硬盘 > kernel buffer > user buffer > kernel socket buffer > 协议栈
+   调用:
+         硬盘 > kernel buffer(快速拷贝到kernel socket buffer) > 协议栈     
+
+    第一步: sendfile系统调用使用DMA引擎将数据复制到内核缓冲区中。然后、数据被内核复制到套接字的缓冲区中
+    第二步: 第三份复制发生在DMA引擎将数据从内核套接字缓冲区发送给网卡。
+           - 如果硬件支持、可以不用将数据复制到套接字缓冲区中。而是仅将具有有关数据的行踪和长度信息的描述附加到套接字缓冲区。DMA引擎将数据直接从内核缓冲区传递到协议引擎、从而消除了剩余了最终副本。
+
+
+ 
+
+elevator 电梯
+anticipatory
+Linux io scheduler:
+                    cfq完全公平
+                    noop无操作
+                    anticipatory预期
+                    deadline最后期限:
+
+CFQ [CFQ（完全公平队列）是在许多Linux发行版的Linux内核和默认的I / O调度。
+ 每个进程一个队列、每个队列中的请求进行合并和排序、每次执行一个进程的4个请求
+
+NOOP调度器（NOOP）是基于FIFO队列概念Linux内核最简单的I / O调度：
+最简单的 I/O调度算法。该算法仅适当合并用户请求，并不排序请求：新的请求通常被插在调度队列的开头或末尾，下一个要处理的请求总是队列中的第一个请求。这种算法是为不需要寻道的块设备设计的，如SSD。
+
+预期调度（预期）是用于调度硬盘输入/输出的算法以及旧调度其由CFQ取代
+
+调度截止日期（截止日期） -它试图保证启动服务时间的要求。
+
+
+块设备中最小的寻址单位是扇区、扇区是磁盘最小的物理存储单元
+
+
+线程之间可以共享内存堆栈、线程之间的交互非常容易实现、比如聊天室客户端之间可以交互、用多线程非常简单、线程中可以直接读写某一个客户端连接、而多进程就要用到管道、消息队列、共享内存实现交互、统称为IPC
+
+同步阻塞：用户进程发起一个IO操作以后、必须等待IO操作的完成、只有当真正完成了IO操作以后、用户进程才能运行。
+同步非阻塞：用户进程发起一个IO操作以后、边等着返回边做其他事情、但是用户进程需要时不时的询问IO操作是否就绪、用户进程不停的去询问、从而引起不必要的CPU资源浪费。
+异步非阻塞：用户进程需要发起一个IO然后立即返回、等IO操作真正完成以后、应用程序才会得到IO操作完成的通知。此时用户进程只需要对数据进行处理就好了、不需要进行实际的IO读写操作、应为真正的IO读写或者写入操作已经用内核完成了。
+
+
+文件描述符：  只适用Unix Linux系统
+  - 非负整数、索引值、是内核为每一个进程所维护的该进程打开文件的记录表。当程序打开一个现有或者创建一个新文件时、内核向进程返回一个文件描述符。
+
+
+
+Linux_CPU:   
+           抢占式 多任务处理
+           各进程都会分配一个时间段、时间段到期后、内核会回收执行权、让另外的进程运行。
+           算法O(1) 
+           CFS完全公平调度器  linux kernel 2.6.23开始引用
+进程的生命周期: 
+             系统将所有进程保存在一个进程表中、无论其状态是运行、睡眠或等待。但睡眠进程会特别标记出来。
+             当调度器在进程之间切换的时候、必须知道系统中每个进程的状态。因为将cpu分配给无事可做的进程、是没有意义的。
+  状态:
+        运行：进程此刻正在运行
+        等待：进程能够运行、但没有得到许可、因为CPU分配给另一个进程。调度器可以在下一次任务切换时选择该进程。
+        睡眠：该进程正在睡眠无法运行、因为它在等待一个外部事件。调度器无法在下一次任务切换时选择该进程。
+
+
+ps aux  S睡眠 s会话期首进程 R运行 D等待 T停止 Z 僵尸 N低优先级任务 +属于前台进程组 l多线程 <高优先级任务
+
+
+
+信号机制是进程之间相互传递消息的一种方式、信号全称为软中断信号(signal)
+进程对信号的响应：
+1.忽略信号、不做任何处理。其中有两个信号不能忽略：sigkill及sigstop
+2.捕捉信号、定义信号处理函数、当信号发生时、执行相应的处理函数。
+3.执行缺省操作
+
+
+
+fork：可以创建当前进程的一个副本、父进程和子进程只有PID不同。在该系统调用执行之后、系统中有两个进程、都执行同样的操作。父进程的内容将被复制、该技术称为写时复制
+fork出来的子进程是父进程的一个拷贝、即子进程从父进程得到了数据段和堆栈段的拷贝、这些需要分配新的内存、而对于只读的代码段、通常使用共享内存的方式访问。
+clone_flags的设置来决定哪些资源共享、哪些资源拷贝。确认哪些资源与父进程共享、哪些资源与线程独立创建
+exec：将一个新进程加载到当前进程的内存并执行。旧程序的内存将刷出、其内容将替换为新的数据。然后开始执行新程序。
+
+内存区域是通过指针寻址、因此CPU的字长决定了所能过来的地址空间的最大长度。
+地址空间的最大长度与实际可用的物理内存数量无关、因此被称为虚拟地址空间。Linux 将虚拟地址空间划分为两个部分、分别称为内核空间和用户空间
+
+当应用程序执行系统调用时、则切换到核心态、内核将完成其请求、在此期间、内核可以访问虚拟地址空间的用户部分、执行完成以后、cpu切换回用户状态、硬件中断也会使cpu切换到核心态
+、这种情况内核不能访问用户空间
+
+用来将虚拟地址空间映射到物理地址空间的数据结构称为页表。
+
+物理内存页经常称为页帧。页则专指虚拟地址中的页
+
+
+
+
+Linux 
+vm.dirty_background_ratio 当脏页数量达到系统内存百分比多少时、就会触发pdflush后台会写进程运行、将一定缓存的脏页异步刷新到磁盘
+
+vm.dirty_ratio 
+当文件系统缓存脏页数量达到内存百分百之多少时、执行写操作的进程将会阻塞并将脏页写入磁盘
+如果脏数据超过这个数量、新的IO请求将会被阻塞、直到脏数被写进磁盘。
+
+
+示例:
+vm.dirty_background_ratio = 10
+vm.dirty_ratio = 15
+首先会触发vm.dirty_background_ratio的条件、开始异步的回写操作、但是这一过程中应用进程仍然可以进行写操作、如果多个应用进程写入的量大于flush进程刷新的量、就会触发vm.dirty_ratio、此时操作系统会转入同步地处理脏页的过程、阻塞应用进程。
+
+
+1、/proc/sys/vm/dirty_ratio
+这个参数控制文件系统的文件系统写缓冲区的大小，单位是百分比，表示系统内存的百分比，表示当写缓冲使用到系统内存多少的时候，开始向磁盘写出数据。增大之会使用更多系统内存用于磁盘写缓冲，也可以极大提高系统的写性能。但是，当你需要持续、恒定的写入场合时，应该降低其数值，：
+ echo '1' > /proc/sys/vm/dirty_ratio
+2、/proc/sys/vm/dirty_background_ratio
+这个参数控制文件系统的pdflush进程，在何时刷新磁盘。单位是百分比，表示系统内存的百分比，意思是当写缓冲使用到系统内存多少的时候，pdflush开始向磁盘写出数据。增大之会使用更多系统内存用于磁盘写缓冲，也可以极大提高系统的写性能。但是，当你需要持续、恒定的写入场合时，应该降低其数值，：
+ echo '1' > /proc/sys/vm/dirty_background_ratio
+3、/proc/sys/vm/dirty_writeback_centisecs
+这个参数控制内核的脏数据刷新进程pdflush的运行间隔。单位是 1/100 秒。缺省数值是500，也就是 5 秒。如果你的系统是持续地写入动作，那么实际上还是降低这个数值比较好，这样可以把尖峰的写操作削平成多次写操作。设置方法如下：
+  echo "100" > /proc/sys/vm/dirty_writeback_centisecs
+如果你的系统是短期地尖峰式的写操作，并且写入数据不大（几十M/次）且内存有比较多富裕，那么应该增大此数值：
+  echo "1000" > /proc/sys/vm/dirty_writeback_centisecs
+4、/proc/sys/vm/dirty_expire_centisecs
+这个参数声明Linux内核写缓冲区里面的数据多“旧”了之后，pdflush进程就开始考虑写到磁盘中去。单位是 1/100秒。缺省是 30000，也就是 30 秒的数据就算旧了，将会刷新磁盘。对于特别重载的写操作来说，这个值适当缩小也是好的，但也不能缩小太多，因为缩小太多也会导致IO提高太快。
+  echo "100" > /proc/sys/vm/dirty_expire_centisecs
+当然，如果你的系统内存比较大，并且写入模式是间歇式的，并且每次写入的数据不大（比如几十M），那么这个值还是大些的好。
+5、/proc/sys/vm/vfs_cache_pressure
+该文件表示内核回收用于directory和inode   cache内存的倾向；缺省值100表示内核将根据pagecache和swapcache，把directory和inode   cache保持在一个合理的百分比；降低该值低于100，将导致内核倾向于保留directory和inode   cache；增加该值超过100，将导致内核倾向于回收directory和inode   cache
+缺省设置：100
+6、 /proc/sys/vm/min_free_kbytes
+该文件表示强制Linux   VM最低保留多少空闲内存（Kbytes）。
+缺省设置：724（512M物理内存）
+7、/proc/sys/vm/nr_pdflush_threads
+该文件表示当前正在运行的pdflush进程数量，在I/O负载高的情况下，内核会自动增加更多的pdflush进程。
+缺省设置：2（只读）
+
+10、/proc/sys/vm/page-cluster
+该文件表示在写一次到swap区的时候写入的页面数量，0表示1页，1表示2页，2表示4页。
+缺省设置：3（2的3次方，8页）
+
+
+
+http://blog.ifeng.com/article/24579893.html kernel 升级
+
+
+http://www.cnxct.com/coping-with-the-tcp-time_wait-state-on-busy-linux-servers-in-chinese-and-dont-enable-tcp_tw_recycle/
+
+
+cpu亲和性、关联性、绑核:
+  在多核运行的机器上、每个cpu本身自己会缓存、缓存着进程的使用的信息、而进程可能会被os调度到其他cpu上、如此cpu cache命中率就低了。当绑定cpu后、程序就会一直在指定的cpu跑、不会有操作系统调度到其他CPU上、性能有一定的提高。
+
+
+
+inotify是一个文件更改通知系统内核功能。它允许应用程序获取文件和目录的更改通知。
+
+
+SMP：对称多处理器、所有处理器都共享系统总线、因此当处理器的数目增加时、系统总线的竞争冲突加大、系统总线将成为瓶颈。
+
+
+
+
+
+
+ 
+load average: 0.00 0.11 0.50
+表示cpu 1 5 15 分钟内的负载、如果单cpu单核、为1.00位饱和状态、超过1.00负载开始排队、理论上超过0.70就要关注。
+如果是多核那么就加一(如8核不超过8.00为正常状态)。每个核心不超过1.0为正常状态。
+
+
+快速重传
+如发送方发出了1/2/3/4/5份数据包、
+
+Selective Acknowledgment 选择性确认
+
+
+
+Vegas：根据RTT来调整、当RTT增大就会减少拥塞窗口、当RTT变小、窗口再次增加。缺点：带宽竞争力、因为网络中的路由器只要缓存了数据、就会造成RTT变大、这个时候缓存没有溢出、并不会发生拥塞、但是由于缓存导致处理延迟、RTT变大、Vegas就会降低自己的拥塞窗口。网络中没有丢包的话、标准的TCP是不会降低自己的窗口、
+
+TCP中的Nagle算法:  
+  避免网络中存在太多的小数据包、尽可能发送大的数据包。
+  在发出去的数据还没有被确认之前、假如又有小数据生成、那就把小数据数据起来、凑满一个MSS或者等收到确认后在发送
+  在任意时刻、最多只有一个未被确认的小段、
+  1.如果包长度达到MSS、则允许发送
+  2.设置了tcp_nodelay
+  3.超时、linux是40ms
+
+延迟ACK:
+  在接收到对端的报文后、并不会立即发送ACK、而是等待一段时间发送ack、以便将ack和要发送的数据一块发送、  
+
+
+反向路由过滤:
+    通过反向路由查询、检查收到的数据包源IP是否可路由、是否最佳路由、如果没有通过验证、则丢弃数据包、设计的目的是防范ip地址欺骗攻击
+
+
+strace 用来跟踪系统调用
+lstrace 跟踪库调用
+perf 性能分析工具
+
+
+
+
+
+库：
+编程库：被重复使用的代码集。优点：1、简化编程、实现代码重复使用。2、可以直接使用许多经过调试的测试和调试工具。
+Linux下的库文件分为共享库和静态库、差别仅在程序执行时所需要的代码是运行时加载的、还是在编译时加载的。
+

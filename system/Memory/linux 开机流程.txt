@@ -1,0 +1,46 @@
+linux 开机流程:
+BIOS(基本的输入输出系统) 开机自检、检查硬件信息是否满足运行基本条件(如有没有内存、硬盘等等)。 这一步也叫做(Powner-ON Self-Test 简称POST)。 
+
+接着BIOS会将控制权交给下一段启动程序、BIOS需要有一个外部存储设备的排序、排在前面的设备优先转接控制权。这种排序称作: 启动顺序(Boot Sequence)
+
+
+Boot Loader 读取并执行第一个启动设备内的MBR 
+
+加载内核、 加载完之后会调用init进程、而init会取得run-level信息。内核还需要加载驱动程序.
+init 初始化、执行rc.sysinit初始化系统环境
+启动各run-level的各个服务
+用户登录界面
+
+Systemd新特性:
+	系统引导实现服务并行启动
+	基于依赖关系定义服务控制逻辑
+	系统状态快照
+	按需激活进程
+
+核心概念: unit
+
+
+unit的类型:
+service unit: 文件扩展名为 .service 用于定义系统服务
+target unit: 文件扩展名为target 用于模拟实现运行级别
+socket unit: 用于标识进程间通信用的socket文件
+mount unit: 定义文件系统挂载点
+
+
+
+
+
+systemctl daemon-reload #修改了配置文件需要执行命令。如不执行会提示Warning: xxx.service changed on disk. Run 'systemctl daemon-reload' to reload units.
+
+
+
+0 ==> runlevel0.target,poweroff.target
+
+systemctl get-default 查看默认运行级别
+systemctl set-default xxx.target 修改默认运行级别 配置文件/etc/systemd/system/default.target
+
+systemctl halt systemctl poweroff  systemctl reboot 
+
+
+
+systemctl list-unit-files --type service 查看开机自启动服务

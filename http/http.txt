@@ -1,0 +1,681 @@
+HTTP:
+    是应用层的协议，一种无状态，以请求/应答方式运行的协议
+
+MIME:将非纯文本数据在传输前，从新编码为文本格式，接收方能够用相反的方式将其重新还原为原来的格式。
+
+
+HTTP 请求
+    GET URL  HTTP/1.1   请求行
+    请求头:
+        Host: time.geekbang.org
+        Connection: keep-alive
+        Cache-control: no-cache
+        User-Agent: Chrome/100 Safari/600
+        Referer: https://accout.geekbang.org/...
+        Cookie: xxxxx;
+
+
+
+HTTP 响应
+
+    HTTP/1.1 200 OK 响应行
+    响应头:
+        Date: SUN, 19 May 2020 09:41:39 GMT
+        Connection: keep-alive
+        Content-Type: text/html
+        Transfer-Encoding: chunked
+        Content-Encoding: gzip
+    响应体:
+        <html>
+        <head></head>
+        <body>
+        </body>
+        </html>    
+
+
+
+http: 请求格式
+method  URL version         version status_code reason
+headers
+
+request body
+
+HTTP: Method
+   GET
+        请求指定资源、使用GET请求应该只用于获取数据。
+        GET把参数包含在URL中
+   HEAD
+         只返回响应首部,响应不包含正文
+         可缓存
+         使用场景是、在下载一个大文件前、先获取其大小、再决定是否要下载。
+
+   POST
+         发送数据给服务器、提交表单  POST通过request body传递参数
+         非幂等
+
+   PUT
+         PUT更新替换、调用一次与连续调用多次都是等价的(即没有副作用)、PUT方法是幂等的
+         PUT和POST的区别、连续调用POST方法可能会出现副作用(比如将一个订单重复提交多次)。
+         如果目标资源不存在、并且PUT方法成功创建了一份、那么服务器必须返回201来通知客户端资源已创建。
+
+   DELETE
+         该请求用于删除指定资源
+
+   OPTIONS:
+         用于获取目的资源所支持的方法。
+         curl -X OPTIONS http://example.org  响应报文包含一个Allow首部字段、该字段的值表明了服务器所支持的所有http方法
+         CROS中的预检请求、预检请求报文AccessControlRequestMethod告诉支持请求的方法
+   TRACE:
+         追踪
+
+   CONECT:
+         连接
+         HTTP CONNECT 隧道代理: 以http的方式来实现任意基于TCP的应用层协议代理。
+         当连接建立之后，服务器会代替客户端与目的主机建立连接。相当于服务器帮客户端想目标服务器建立连接发送请求，之后讲数据返回给客户端。
+
+
+         CONNECT server.example.com:80 HTTP/1.1
+         Host: server.example.com:80
+
+
+幂等性: 指的是同样的请求被执行一次与连续多次的效果是一样的。 幂等方法不应该有副作用
+   GET HEAD PUT DELETE 都是幂等性
+   POST 不是
+
+
+
+TransferEncoding:
+ 是一个用来表示HTTP报文传输格式的头部值。 取值chunked
+ 如果一个http消息(请求消息或应答消息)的TransferEncoding消息的值为chunked、那么消息体由数量未定的块组成、并以最后一个大小为0的块结束。
+ chunked的优势在于、服务端可以边生成边发送、不用事先生成全部的内容。
+(注: http2不支持TransferEncoding: chunked。因为HTTP2有自己的streaming的传输方式)
+
+
+HTTP 状态码:
+  1xx:简单信息
+  2xx:正确响应
+  3xx:重定向类
+  4xx:错误类,客户端
+  5xx:错误类，服务器
+
+301 永久重定向、说明新的请求资源已经被移动到了由Location头部指定的url上、好处是告诉搜索引擎、这个地址已经固定不会在改变了、这样搜索引擎会更新新的url。 可以被缓存
+
+302 临时重定向。和301区别是搜索引擎不会对该资源的链接进行更新
+
+307 临时重定向 不允许改变方法、禁止被缓存
+    请求的资源已经被临时移动到了另一个位置，并且客户端应该继续使用原始请求的方法和主体来访问这个资源。通常被用于处理POST请求的重定向，因为POST请求不能自动重试，需要客户端重新发送一个新的请求来完成操作
+
+308 永久重定向  不允许改变方法:
+  在重定向的过程中、请求方法和消息主体不会发生改变、然后在返回301状态码的情况下、请求方法有时候会被客户端错误的修改为GET方法.
+  307和308 可以确保请求方法和消息主体不会发生变化。
+
+
+
+
+Cookie 是HTTP的状态管理机制
+   保存在客户端、由服务器端生成、由浏览器维护。
+   记录用户状态
+
+   Cookie 大小不应超过4KB、浏览器有要求
+   Cookie 会被附加在每个HTTP请求中、所以无形中增加了流量
+   HTTP中Cookie是明文传递的。
+
+  Domain:
+    表示那个域名要附带这个cookie
+  Path:
+    浏览器发出HTTP请求时，哪些路径要附带这个cookie。  
+  HttpOnly:
+    告知浏览器，此cookie只能通过浏览器HTTP协议传输，禁止其他方式访问，浏览器的js引擎就会禁用document.cookie等一切相关的API，脚本攻击也就无从谈起了。
+  Secure:
+    表示这个cookie仅能用HTTPS协议加密传输，明文的HTTP协议禁止发送。但cookie本身不是加密的，浏览器里还是以明文的形式存在。  
+  Expires/MaxAge:
+    cookie超时时间    
+  SameSite:
+    可以防范"跨站请求伪造(XSRF)"攻击，设置成"SameSite=Strict"可以限定cookie不能随着跳转链接跨站发送。
+
+
+
+
+CatchControl:
+  maxage:
+    是生存时间
+  nostore: 
+    不允许缓存
+  nocache:
+    它的字面含义与nostore搞混，实际的意义并不是不允许缓存，而是可以缓存，但在使用之前必须去服务器验证是否过期，是否有最新版本。
+  mustrevalidate:
+    又是一个和nocache相似，意思是如果缓存不过期就可以继续使用，但过期了如果还想用就必须去服务器验证。  
+
+
+
+跨域知识点:
+    是一种浏览器的安全机制，用于防止恶意网站通过JavaScript跨域请求资源，例如获取用户的敏感信息。
+    默认情况下要求ajax的请求必须和当前域名在同一个域下面。
+
+
+
+  CORS:
+     跨域资源共享是一种机制、它使用额外的http头来告诉浏览器、让运行在一个origin(domain)上的web应用被准许访问来自不同资源服务器上的指定资源。
+     跨站http请求(Crosssite HTTP request)是指发起请求的资源所在域不同于该请求所指向资源所在的域的 HTTP 请求.
+     Origin表示本域、也就是浏览器当前页面的域。当JavaScript向外域发起请求后、浏览器收到响应后、首先检查AccessControlAllowOrigin是否包含本域、如果是、则此次跨域请求成功、如果不是则请求失败。
+
+     简单请求包括GET、HEAD和POST(post的content-type类型仅限application/xwwwformurlencoded/multipart/formdata和text/plain)、并且不能出现任何自定义头。
+
+    application/json的post请求、在发送ajax请求之前、浏览器会先发送一个OPTIONS请求(称为preflighted请求)到这个url上、询问目标服务器是否接受。
+   
+      如假设本域是a.com、外域是b.com、只要响应头AccessControlAllowOrigin为a.com、或者是*、本次请求就可以成功。
+
+      默认情况下、JavaScript在发送ajax请求时、url的域名必须和当前页面一致、域名相同、协议相同、端口相同。
+
+  AJAX: 同源政策规定、AJAX请求只能发给同源的网址、否则就报错.
+
+DNS预读取: 预读取是一项使浏览器主动去执行域名解析的功能。其范围包括文档的所有链接，无论是图片的，CSS 的，JavaScript等其他用户能够点击的 URL。
+
+
+XML：设计用来传送及携带数据信息、传送信息、不用来表现或展示数据、HTML语言则用来表现数据、所以xml用途的焦点是它说明数据是什么、以及携带数据信息。
+
+AJAX = Asynchronous JavaScript and XML(异步的JavaScript和XML)
+ 不是新的编程语言、是一种使用现有标准的新方法。
+ 是一种无须重新加载整个网页的情况下、能够更新部分网页的技术
+ 核心是XMLHttpRequest对象
+
+XMLHttpRequest 用于在后台与服务器交换数据。这意味着可以不重新加载整个网页的情况下、对网页的某些部分进行更新。
+无需重新加载整个网页的情况下、能够更新部分网页的技术
+
+<iframe>表示嵌套的浏览上下文、有效地将另一个HTML页面嵌入到当前页面中。
+
+
+DSO：(Dynamic Shared Object)动态模块对象或动态共享对象、用得着模块就装载模块、用不着也可以不让模块被装载。
+
+
+httpd原理详解
+   http:hypertext transport protocol 超文本传输协议
+   超文本：所谓的文本就是纯ASCII码的、遵循html(hypertext mark language 超文本标记语言)所研发的文本
+   http报文有两种: 请求报文和响应报文
+   http请求报文格式:
+   <method> <requestURL> <version>
+    <headers>
+    空白行
+   <entitybody>
+
+    http响应报文格式：
+   <version> <status> <reasonphrase>
+    <headers>
+    空白行
+   <entitybody>
+
+
+HTTP Request:
+   Request Headers
+      Host: xxx
+      UserAgent: XXX
+      AcceptEncoding: xxxx
+   General Headers
+      Connection: keepalive
+   Entity Headers
+      ContentType: multipart/formdata; bounday=111111
+      ContentLength: 2222
+
+
+http请求通常包含以下内容:
+   起始行: 方法、url http版本
+   请求头部: Request headers General Headers
+   空白行: 边界、确定所有请求元数据均已发送
+   正文: body
+
+http 响应报文:
+   起始行: http版本、状态码、OK（ok是状态码的文字说明）
+   响应头部: response headers general hearders entity headers
+   正文: body 
+
+
+
+    <method>: 请求方法， 希望服务器端执行的动作，如GET、HEAD、POST等
+    <requesturl>: 请求的资源，可以是相对路径，也是完整的URL
+    <version>：协议版本，格式HTTP/<major>.<minor>，如http/1.0、表明用1.0的版本
+    <headers>：HTTP首部、首部又可以分为三类、分别是为通用首部、请求首部和响应首部
+    <status>: 状态码，1xx,2xx,3xx,4xx,5xx这种就是状态码
+    <reasonphrase>：原因短语，数字状态码易读信息
+    <entitybody>: 主体部分、包含我们请求的内容
+ 
+
+
+
+ HTTP1.0和HTTP1.1协议中都有对KeepAlive的支持,其中HTTP1.0需要在request中增加"Connection: keepalive" header才能够支持,而HTTP1.1默认支持。
+
+HTTP1.0 KeepAlive支持的数据交互流程如下:
+ a)Client发出request,其中该request的HTTP版本号为1.0,同时在request中包含一个header:"Connection: keepalive"。
+ b)Web Server收到request中的HTTP协议为1.0及"Connection: keepalive"就认为是一个长连接请求,其将在response的header中也增加"Connection: keepalive",同时不会关闭已建立的tcp连接。
+ c)Client收到Web Server的response中包含"Connection: keepalive",就认为是一个长连接不close tcp连接,并用该tcp连接再发送request。(跳转到a) 
+
+HTTP1.1 KeepAlive支持的数据交互流程如下:
+ a)Client发出request,其中该request的HTTP版本号为1.1。
+ b)Web Server收到request中的HTTP协议为1.1就认为是一个长连接请求,其将在response的header中也增加"Connection: keepalive"。同时不会关闭已建立的tcp连接。
+ c)Client收到Web Server的response中包含"Connection: keepalive",就认为是一个长连接,不close tcp连接,并用该tcp连接再发送request。(跳转到a) 
+
+
+
+
+
+
+处理模型:
+  1.单进程
+  2.多进程
+  3.一个进程处理多个请求
+  4.多个进程处理N个请求
+  www.netcraft.com
+
+应用程序服务器：
+IIS
+Tomcat
+Websphere（IBM,JSP,commodity）
+WebLogic  （Oracle，jsp，commodity）
+JBoss     （Redhat）
+
+MPM：Muliti path module
+mpm_winnt
+prefork 预先生成进程（一个请求有一个进程响应,每个进程也可以处理多个请求）
+worker  单进程多线程，基于线程，一个进程响应多个用户请求，一个进程下多个线程处理用户请求，多个线程共享同一个进程资源，那么读取的速度比较快，
+缺点是多个线程去写一个文件的时候，可能导致资源争用，这个时候就要加锁，如果加锁机制不理想的话，未必比prefork效率高，最好经测试，还不如prefork
+event 事件驱动（一个进程响应多个请求，基于事件驱动）
+
+
+PHP-FPM
+   pm 表示使用哪种方式 有两种方式 static 静态  dynmaic 动态
+   pm.max_children 静态方式下开启的phpfpm进程数量
+   pm.max_requests php-fpm子进程能处理的最大请求数
+   pm.start_servers 动态方式下的起始phpfpm进程数量
+   pm.min_spare_servers 最小phpfpm进程数
+   pm.max_spare_servers 最大phpfpm进程数量
+   pm_process_idle_timeout 闲着多久收回进程
+
+  注意: 如果pm设置static 
+
+   request_slowlog_timeout  设置php慢日志超时时间
+   slowlog  记录慢日志
+
+
+
+
+
+Options:
+None：不支持任何选项 （关闭所有）
+indexes：允许索引目录
+followsynlinks：允许访问符号链接指向的原文件
+incloues：允许执行服务端包含的（ssi）
+execcgi：允许运行cgi脚本
+all：支持所有选项
+
+Forbidden 禁止 Directory 目录 文件DocumentROOT prefetch 预取 References   require 需要 request请求
+
+order；用于定义基于主机的访问功能的，ip，网络地址，主机名定义的访问控制
+order allow，deny
+allow from all
+
+要求；仅允许192.168.20.0的网段访问，
+ allow，deny
+allow from 192.168.20.0
+
+长连接：http1.1引用了长连接机制，来减少tcp/ip请求资源的次数。
+http的访问过程，首先它是基于TCP/IP协议，在访问时要先连接tcp的3次握手(3次握手是不会产生数据的)，握完以后，开始建立连接请求，这个时候就浏览器开始向服务器发送
+请求，就是请求一些图片，js，html页面，如有10个资源，不用长连接的话，每请求一个资源就要断开，然后在3次握手，也就是说要请求10次，如果是长连接，client和server
+通过一个连接，请求多个资源！不必为每个Web对象的传送建立一个新的连接,一个连接中可以传输多个对象!
+
+CGI：web服务本身只能处理静态页面，之所以能够处理其他动态程序，是因为mime机制，就是客户端浏览器支持各种mime的插件
+web服务服务器调用其它程序或者启动其它进程来处理动态程序，然后将处理好的程序返回给web服务器。
+
+查看某个用户打开的文件个数：lsof u apache |wc l 查看某个进程打开的文件个数：lsof p pid |wc l
+
+
+
+
+附：性能测试基本概念
+ 
+基本概念： 
+Throughput（吞吐量）：按照常规理解网络吞吐量表示在单位时间内通过网卡数据量之和，其中即包括本机网卡发送出去的数据量也包括本机网卡接收到的数据量。 一个100Mb(位)的双工网卡，最大发送数据的速度是12.5M字节/s ， 最大接收数据的速度是12.5M字节/s， 可以 同时 收发 数据。 
+并发用户数：是同时执行操作的用户(线程数)。 
+响应时间：从请求发出到收到响应花费的时间 。
+
+QPS  Queries Per Second  每秒处理的查询数（如果是数据库，就相当于读取）
+TPS  Transactions Per Second  每秒处理的事务数(如果是数据库，就相当于写入、修改)
+IOPS，每秒磁盘进行的I/O操作次数  每秒读和写的次数。
+
+例如对某个数据库测试，分开两次测QPS与TPS。
+QPS（读取）值总是高于TPS(写、改)，并且有倍率关系，因为：
+1、数据库对查询可能有缓存。
+2、机械硬盘或SSD硬盘的读就是比写快。
+
+
+
+http请求头信息：IfModifiedSince
+
+对于html的script标签
+
+IfModifiedSince是标准的HTTP请求头标签，在发送HTTP请求时，把浏览器端缓存页面的最后修改时间一起发到服务器去，服务器会把这个时间与服务器上实际文件的最后
+修改时间进行比较。在你的请求中发送一个 IfModifiedSince 头信息，它包含了上一次从服务器连同数据所获得的日期。如果数据从那时起没有改变，服务器将返回
+一个特殊的 HTTP 状态代码 304，这意味着 “从上一次请求后这个数据没有改变”。当服务器发送状态编码 304 时，不再重新发送数据。您仅仅获得了这个状态代码。
+所以当数据没有更新时，你不需要一次又一次地下载相同的数据；服务器假定你有本地的缓存数据。
+
+
+
+
+
+
+http1.0:
+   短连接接
+   
+HTTP1.1 重要特性: 
+   长连接
+   host 头部 单IP 多域名
+   管道 在一个tcp连接上可以发送多个请求
+   分块编码传输
+   增强的缓存机制 cachecontrol  ETag/IfNoneMatch
+   传输编码以及请求管道 字段范围请求。
+   增加更多头部字段: 编码、字符集、甚至语言协商机制、还添加了传输编码、缓存指令、客户端cookie等
+  
+
+http1.1存在的问题:
+   pipline 并发请求会遇到线头阻塞、同一时刻只能处理一个tcp请求响应
+   tcp连接数限制、同一个域名下面最大6-8个TCP连接
+   head 无压缩
+  
+
+pipline :
+     默认情况下HTTP请求是按顺序发出的。下一个请求只有在当前请求收到应答过后、才会被发出。由于会受到网络延迟和带宽的限制、在下一个请求被发送到服务器之前、可能需要等待很长时间。
+   pipline
+       是在同一个长连接上发出连续的请求、而不用等待应答返回在发送。这样可以避免连接延迟。
+       并行发起请求、但是返回数据时必须遵循"先进先出"。一次只能在一个连接上处理一个请求。  
+       仅支持幂等方法: 即GET、HEAD、PUT和DELETE
+  缺点:
+     代理和浏览器不能正确处理  
+     head of line blocking
+       即队头阻塞、即不支持并发响应、严格要求先进先出FIFO的队列顺序。发送请求、等待响应完成、再发送客户端队列中的下一个请求。 大多浏览器关闭、这个特性
+
+HTTP2:   解决HTTP1.x的性能和安全性问题
+
+  优势:
+   是二进制、不是文本
+   头部压缩
+   多路复用、没有队头阻塞(多个请求复用一个TCP连接、然后每个请求和响应都被拆分为若干个frame发送)
+   一个连接可以进行并行处理、不用向http1.x中、向同一主机并发发起多个tcp连接
+   支持服务器主动将响应"推送"到客户端缓存
+
+   http2 并行发起请求(使用同一个tcp请求)、并行返回数据。支持请求与响应的多路复用来减少延迟、通过压缩http首部字段将协议开销降低最低、同时增加对请求优先级和服务端推送的支持。 减少额外的往返时间RTT
+
+   首部压缩:
+           使用HPACK规范作为头压缩
+           客户端和服务器都维护在之前客户端服务器请求中使用的head头列表、HPACK在将每个头部字段在传输时、进行压缩、然后服务器在先前传输的头部字段类表中查找编码信息、以重建完整的头部信息。
+           需要浏览器和服务端之间支持http/2
+             维护一份相同的静态字典、包含常见的头部名称、以及特别常见的头部与值的组合
+             维护一份相同动态字典、可以动态添加内容
+             支持静态哈夫曼码表的哈夫编码
+
+
+
+          http1.x中使用gzip对正文进行压缩
+          hpack只会对头部字段进行压缩。可以防止CRIME攻击
+
+          测试: 安装nghttp2
+              h2load https://www.qq.com |tail 6 |head 1 可以查看headers(space savings)
+
+   服务器推送:
+       可以将未来预期的请求中推送给客户端。如客户端请求资源X、并且可以会用到资源Y的请求、则服务器可用将X和Y一起推送、而不是等待客户端请求Y。
+       在同一个连接中将推送的资源与原始请求的信息进行多路复用
+   头部压缩、多路复用、优先级划分、安全性
+    并行操作无需与服务器建立多个连接
+
+   二进制分层帧:
+      http2.0 性能增强的核心、全在于新增的二进制分帧层。
+       http1.x以换行符作为纯文本的分隔符、而http2.0将所有传输的信息分隔为更小的消息和帧、并对它们采用二进制格式的编码
+       二进制协议解析起来更高效。
+
+   流、消息和帧
+      流:
+        已建立的连接上的双向字节流
+      消息
+        与逻辑消息对应的完整的一系列数据帧。就是一个http请求
+      帧
+        HTTP2.0通信的最小单位、每个帧包含帧首部、至少也会标识当前帧所属的流。一个消息都会被分解成一个或多个帧，这些帧独立发送，并在接收端重新组装成完整的消息。常见的HEADERS帧包含头部信息，DATA帧包含消息的正文。
+
+    Stream ID的作用:
+       是实现多路复用的关键。如先发送一个id1、然后然后id2或者id3、接着在发送id1、也就是说在同时并发发送、接收时时在重组.    
+
+
+
+
+   请求优先级
+    把http消息分解成为很多独立的帧。
+       0 表示最高优先级
+       2^31 1 表示最多优先级
+
+   缺点:
+       http/2的缺点: TCP(队头阻塞)已及TLS连接的延迟
+
+HTTP3.x:
+   彻底解决队头阻塞、使用UDP
+   基于UDP实现了快速发送和接收数据、0RTT1RTT
+  
+  两者都提供数据流
+  两者都提供服务器推送
+  两者都有头部压缩，QPACK与HPACK的设计非常类似
+  两者都通过单一连接上的数据流提供复用
+  两者都提供数据流的优先度设置
+
+QUIC: 
+  基于UDP、由Google开发。
+
+TCP队头阻塞:
+   TCP流中一个丢失的数据包会使后面的请求都等待、直到重新发送和接收该包为止
+  主要是丢包、影响特别大、因为它是单个连接、如果tcp数据包丢失、则TCP连接必须请求重新发送它、并等待该数据包成功重传、然后才能处理后续的TCP包。
+
+
+
+解决队头阻塞:
+   应用层无法解决、只能通过UDP解决
+   QUIC: google开发、就是使用UDP实现了一个可靠的多路复用传输层。
+
+HTTP优化:
+   缓存
+   CDN
+   持久连接: 长连接
+   减少请求
+   压缩
+  HTTP管道:
+     好处是一个tcp连接上、可以请求多个资源、减少网络往返时间。
+     缺点是队头阻塞、即不支持并发响应、严格要求先进先出FIFO的队列顺序。发送请求、等待响应完成、再发送客户端队列中的下一个请求。 大多浏览器关闭、这个特性
+
+  多TCP连接:
+     由于http1.x不支持多路复用、所以浏览器并行使用多个tcp连接会话。即最大的请求数与打开的连接数相同
+     大部分情况下支持每个"域名"打开6个连接
+     缺点占用cpu和内存资源
+
+  域名分区:
+
+     使用多域名来提供并发请求。
+
+     缺点: 每次新主机名都要一次额外的DNS查询。
+
+  连接与合并:
+
+     连接
+        把多个JavaScript或CSS文件组合为一个文件
+        对javascript和css来说、只要保持一定的顺序、就可以做到把多个文件连接起来而不影响代码的行为和执行。
+
+     拼合
+        把多张图片组合为一个更大的复合的图片    
+
+
+base64 编码使用64个ASCII符号和空白符将任意字节流编码为ASCII字符串。
+       编码过程中、base64会导致被编码的流变成原来的3/4、即增大33%的字节开销
+
+
+_utmz：跟踪访问是从哪里来的
+_utmz：跟踪每个用户的大量访问/第一次、最后一次
+_utmb和_utmc：跟踪每个用户的访问时间、从开始到结束；
+
+
+关注点分离
+HTML：负责网页的结构、又称语义层
+CSS： 负责网页样式 又称视觉层
+JavaScript：负责网页的逻辑和交互、又称逻辑层或交互层
+
+
+XSS攻击：跨站脚本攻击、它允许攻击者将恶意代码植入到提供给其它用户使用的页面中。
+   攻击者在web页面中插入恶意脚本、当用户浏览页面时、执行脚本
+        储存型XSS、主要是用户输入恶意数据、数据被存入数据库。
+          特点:
+            1、保存的服务端
+            2、一般存在于Form表单提交等交互功能、没有对表单做转义直接入库
+
+
+        反射型XSS、是将脚本代码加入URL地址的请求参数里
+          特点:
+            1、及时性的、不在服务器上存储、直接通过GET和POST请求完成
+            2、攻击者需要诱骗点击
+
+   危害
+    1.窃取Cookie
+      通过javascript document.cookie获取cookie信息
+    2.未授权操作 
+      直接代替用户在HTML进行各类操作
+    3.按键记录和钓鱼
+      鼠标的轨迹，键盘输入的信息等。也就是说，你输入的账号名和密码，都可以被javascript记录下来。           
+
+
+ 防护的核心原则: 一切用户输入皆不可信。           
+   防范
+    1、对参数进行转换如alter  < > 等进行转换成&lt &gt
+    2、后端入库时应该对前端字段进行转义处理。前端从后端获取数据、任何字段需要做转义处理
+    3、CSP: W3C提出来提升web的安全性。所谓CSP，就是在服务端返回的HTTP header里面添加一个ContentSecurityPolicy选项，然后定义资源的白名单域名。浏览器就会识别这个字段，并限制对非白名单资源的访问。
+
+SQL注入:
+        攻击者把SQL命令插入到应用的输入参数中
+        解决方法: 对参数过滤和转义、严格检查变量类型和格式
+
+
+        可以绕过验证登录后台，非法篡改数据库中的数据，还能执行任意的sql语句，盗窃用户的隐私数据影响公司业务等等。  
+
+   危害
+    1.绕过验证
+    2.任意篡改数据
+    3.窃取数据
+
+CSRF攻击: 跨站请求伪造   
+         攻击者通过跨站请求以合法的用户身份进行非法操作
+          攻击者盗用你的登录信息、以你的身份模拟发送各种请求。
+         CSRF的原理是利用浏览器的Cookie或服务器的session、盗取用户身份。
+          如Bob登录银行账号、这个时候访问攻击者网站、而攻击者网站里面利用bob登录的信息、去访问银行。
+
+         防范: 1、验证HTTP Referer字段
+              2、添加token。 
+              3、二次验证。
+
+CC 攻击:
+       攻击流量不大、占用流量不大、占用的是服务器内存资源。
+       CC攻击来的IP都是真实的分散的。攻击者的请求全部都是有效的请求。
+
+
+REST(表现层状态转换):
+  是一种软件开发风格、
+  目的是便于不同软件/程序在网络中互相传递信息
+  基于HTTP之上而确定的一组约束和属性、是一种设计提供万维网服的软件架构风格
+
+  基本思想是通过明确定义的标准化操作和格式、将资源(列如文档)与其状态和关系一起传输
+  在REST架构风格中、数据和功能被视为资源、并使用统一资源标识符(uri)进行访问  
+
+  (1)每一个URI代表一种资源
+  (2)客户端和服务器之间、传递这种资源的某种表现层
+  (3)客户端通过四个HTTP动词、对服务端资源进行操作、实现表现层状态转化
+
+REST架构6个约束:
+  1、客户服务器: 通信只能有客户端单方面发起、表现为请求响应的形式
+  2、无状态: 通信的会话状态、应该全部由客户端负责维护
+  3、缓存: 响应内容可以在通信链的某处被缓存、以改善网络效率
+  4、统一接口: 通信链的组件之间通过统一的接口相互通信、以提高交互的可见性
+  5、分层系统: 通过限制组件的行为、将架构分解为若干等级的层
+  6、按需代码: 支持通过下载并执行一些代码、对客户端的功能进行扩展
+  
+RESTful API:
+是一种应用程序接口、它使用http请求GET、PUT、POST和DELETE来获取数据
+
+资源:
+    就是网络上的一个实体、或者说是网络上的一个具体信息。它可以是一段文本、一张图片、一首歌曲、一种服务。可以通过URI指向它、每种资源对应一个特定的URI
+表现层:
+    资源是一种信息实体、它可以有多种外在表现形式。如文本可以用txt、也可以用http格式、json格式、图片可以用jpg。URI只代表资源实体、不代表它的形式
+状态转化:
+    如果客户端想要操作服务器、必须通过某种手段、让服务端发生状态转化。        
+
+
+
+看url就知道要什么    >用URL定位资源
+看http method 就知道要干嘛 > 用http动词描述操作
+看http response code 就知道操作结果 >用http响应状态码表示操作结果
+
+
+ISO:国际标准化组织
+ANSI:美国国家标准化局
+ITUT国际电信联盟
+IEEE电气和电子工程师学会
+
+
+
+CGI  VS FastCGI
+   FastCGI 预先创建进程.
+
+PHPFPM:
+  用来管理fastcgi程序  
+
+
+浏览器如何渲染UI
+  1、浏览器获取HTML文件、然后对文件进行解析、形成DOM Tree
+  2、与此同时、进行CSS解析、生成Style Rules
+  3、接着将DOM Tree与Style Rules合成为Render Tree
+  4、接着进入布局(layout)阶段、也就是为每个节点分配一个应出现在屏幕上的确切坐标
+  5、随后调用GPU进行绘制
+
+html:
+ul 
+ol 分段数字
+dt dd 标题和分段
+
+DNS 劫持:
+   攻击者将查询重定向到其他域名服务器。
+DNS缓存中毒:
+   向DNS缓存中输入错误信息的行为、因此查询返回错误的响应  
+
+NXDOMAIN攻击
+   DNS泛红攻击、攻击者利用请求将DNS服务器淹没、请求不存在的记录、以试图对合法流量造成影响. 
+
+DNSSEC
+   DNS系统在设计时、并为考虑安全性、DNSSEC是DNS安全扩展。
+   DNSSEC通过对数据进行数字签名来保护有效性。
+
+
+
+
+json:
+  轻量级的数据交换格式。JSON采用完全独立于语言的文本格式。易于人类读写，同时也易于机器解析和生成，方便不同的程序之间交换。
+
+  规定:
+    1.并列的数据之间用逗号(",")分隔。
+    2.映射用冒号(":")表示。
+    3.并列数据的集合(数组)用方括号("]")表示。
+    4.映射的集合(对象)用大括号("{}")表示。
+
+  数组和对象的区别:
+    两者都可以用来表示数据的集合。数据集合既可以用数组表示，也可以用对象表示。
+
+    区别:
+       数组表示有序数据的集合，而对象表示无序数据集合。如果数据的顺序很重要，就用数组，否则就用对象。
+       数组的数据没用"名称",对象的数据有"名称"
+
+
+
+
+
+Base64
+  是一种二进制到文本的编码方式。将byte数组编码为字符串的方法。
+  不是加密算法，仅仅是一种编码方式。
+
+  为什么叫Base64:
+    是基于64个字符的一种编码方式。编码后的文本只包含64个ASCII码，加上一个填充字符=

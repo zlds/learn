@@ -1,0 +1,900 @@
+MySql
+  关系型数据库。
+  强schame约束。
+  OLTP 在线联机事务系统.
+
+
+Mysql 日志:
+           1.事务日志
+           2.错误日志
+           3.一般查询日志
+           4.中继日志
+           5.慢查询日志
+
+二进制日志格式:
+  statement:
+      基于语句
+      每一条会修改数据的sql都会记录在binlog中
+  row:
+      基于行的 
+      优点:  
+             数据恢复
+
+             delete语句、row格式的binlog会把被删除掉的行的整行信息保存起来、所以如果删错数据、可以将binlog中记录的delete语句转换成insert、把被错删的数据插入回去就可以恢复了
+             insert 语句、转换成delete
+             update语句、binlog里面会记录修改前整行的数据和修改后的整行数据。所以、如果你误执行了update、只需要把这个event前后的两行信息对调一下、再去数据库里面执行、就能恢复这个更新操作了。
+
+      缺点是、很占空间。比如delete语句删掉10w行数据、用statement的话就是一条sql语句被记录到binlog中、占用几十个字节空间。但如果用row格式、就要把这10w条记录都写到binlog中。这样做不仅会占用更大的空间、同时写binlog也要消耗IO资源、影响执行速度。
+  mixed:
+    混合的 mysql自己会判断这条sql语句是否可能引起主备不一致、如果有可能、就用row格式、否则就用statement格式
+
+binlog 恢复数据的标准做法:
+  用mysqlbinlog工具解析出来、然后把解析结果整个发给mysql执行。
+  mysqlbinlog master.0001 startposition=xxx stopposition=xxx |mysql h xxx u p
+
+双M结构、循环复制问题:
+  1、规定两个库的server id必须不同
+  2、一个备库接到binlog并在重放的过程中、生成与原binlog的server id相同的新的binlog
+  3、每个库在收到从自己的主库发过来的日志后、先判断serverid、如果跟自己的相同、表示这个日志是自己生成的、就直接丢弃这个日志
+  执行逻辑:
+    1、从节点A更新的事务、binlog里面记的都是A的server id
+    2、传到节点B执行一次以后、节点B生成的binlog的server id也是A的server id
+    3、再传会给节点A、A判断到这个server id与自己的相同、就不会再处理这个日志。所有、死循环在这里就断掉了。
+
+
+seconds_behind_master的计算方法:
+  T1: 主库A执行完成一个事务、写入binlog、我们把这个时刻记为T1
+  T2: 之后传给备库B、我们把备库B接收完这个binlog的时刻记为T2
+  T3: 备库B执行完成这个事务、我们把这个时刻记为T3
+
+  (时间精度是秒)
+  1、每个事务的binlog里面都有一个时间字段、用于记录主库上写入的时间
+  2、备库取出当前正在执行的事务的时间字段值、计算它与当前系统时间的差值、得到seconds_behind_master
+
+
+GTID:
+   gtid_mode=on  enforce_gtid_consistency=on 开启GTID模式
+  全局事务ID、是一个事务在提交的时候生成的、是这个事务的唯一标识。
+  GTID=source_id:transaction_id  source_id是一个实例第一次启动时自动生成的、是一个全局唯一的值
+                                 transaction_id 是一个整数、初始值是1、每次提交事务的时候分配给这个事务并加1.
+
+  gtid_executed 当前实例执行过的GTID集合(实际上包含了所有记录到binlog中的事务)
+  gtid_next 如何生成下一个GTID。取值: AUTOMATIC自动生成下一个GTID ANONYMOUS不产生GTID 显式指定GTID
+
+  AUTOMATIC在每次事务提交时自动生成新的GTID、它是从当前已经执行的GTID集合(gtid_executed)中、找一个大于0的未使用的最小值作为下个事物GTID
+   在GTID模式下、每个事务都会跟一个GTID一一对应。
+   生成GTID有两种方式: 1、gtid_next=automatic 
+
+
+  好处:
+     简单的实现Failover:  不用在像以前那样在需要找log_file 和log_pos 
+     确保每个事务只会被执行一次
+
+semisync:
+  1、事物提交的时候、主库把binlog发给从库  
+     主服务器上执行完了会阻塞、等待至少一个从收到了并确认。
+     如果发生超时、则还原为异步复制。
+
+  2、从库收到binlog以后、发回给主库一个ack、表示收到了(事务写到中继日志、并刷新到磁盘)
+  3、主库收到了这个ack以后、才能给客户端返回"事物完成"的确认
+
+  rpl_semi_sync_master_timeout  配置同步超时时间
+
+
+
+Sending to client:
+  仅当一个线程处于"等待客户端接收结果"的状态、才会显示
+Sending data
+  并一定是指正在发送数据、而可能是处于执行器过程中的任意阶段
+  它的意思是正在执行  
+
+临时表:
+  在实际应用中、临时表一般用于处理比较复杂的计算逻辑。每线程自己可见、线程退出时自动删除
+
+
+
+
+事务:
+   事务是由一组操作构成的可靠的独立的工作单元。
+   事务具备ACID的特性、即原子性、一致性、隔离和持久性
+
+  原子性：要么全执行、要么不执行
+  一致性：开始和结束数据一致.如张三给李四转钱、张三余额100、李四余额100、张三向李四转50、最终张三余额50、李四余额150。不能处理张三减了50、李四没加
+  隔离性: 是为了并发。
+  持久性: 最终的结果都持久化到磁盘.
+
+文件说明:
+    myisam:    
+        .MYD 存放myisam表数据
+        .MYI 存放myisam索引信息
+        .frm 表相关元数据(表结构)
+    Innodb:
+        .frm 表结构
+        .ibd 表数据和索引
+
+
+
+MVCC: 多版本并发控制。是一种并发控制的方法、一般在数据库管理系统中、实现对数据库的并发访问。
+      读不加锁、读写不冲突
+      读操作分成两类: 快照读和当前读、快照读、读取的是记录的可见版本(有可能是历史版本)、不用加锁。当前读、读取的是记录的最新版本、并且、当前读返回的记录、都会加锁、保证其他事务不会再并发修改这条记录
+
+   快照读:
+      简单的select操作
+
+   当前读:
+    特殊的读操作、插入/更新/删除操作、属于当前读、需要加锁  
+    select * from table where ? lock in share mode;
+    select * from table where ? for update;
+    insert xxxx
+    update xxxx
+    delete xxxx
+  以上都属于当前读、读取记录的最新版本。并且、读取之后、还需要保证其他并发事务不能修改当前记录、对读取记录加锁。
+
+视图:
+      可重复读隔离级别下、这个视图是在事务启动时创建、整个事务存在期间都用这个视图。
+      读提交隔离级别下、这个视图是在每个SQL语句开始执行的时候创建的
+      读未提交隔离级别下、直接返回记录上的最新值、没有视图概念
+
+悲观锁:
+       只能依靠数据层面实现
+       假设每次拿数据的时候都会认为别人会修改、所以每次在拿数据的时候都会上锁。
+乐观锁:
+       基于数据库版本记录机制实现  第二种是时间戳
+       适用于 读多 写少的场景
+
+       操作数据时不会加锁、提交的时候会检查数据是否存在冲突。
+       使用数据库版本记录、读取数据时、将version字段的值一同读出、数据每更新一次、对此version值加一、当提交更新时、判断数据对应的当前版本信息、与第一次读取出来的version值进行比对。
+
+2PL: 二阶段锁 加锁不放锁、放锁不加锁
+
+max_write_lock_count=1  默认情况下，写操作优先级高于读优先级，即便是先发送的读请求，后发送写请求，此时也会优先处理写请求。=1表示处理一个写请求后，就会暂停写操作，给读操作执行机会。
+lowpriorityupdates=1 给读请求更高的优先级
+
+
+concurrent_insert=0 不允许在select操作时，并发执行insert
+concurrent_insert=1 如果表里面没有hole(可能性不大)，select操作时，可以并发执行insert，新数据位于数据文件结尾(缺省)。如果同时有多个insert操作，这些insert是串行执行的。
+concurrent_insert=2 不管表有没有hole，在select时，都允许在数据文件结尾并发执行insert，而且一旦select释放lock之后，insert还是会首先尝试插入到hole里面。
+
+
+由于Linux系统区分大小写，所以Mysql中表名、字段什么的都区分大小写
+2、 由于很多SQL是在windows下写的，放到Linux中就会出问题
+3、 解决方法：编辑/etc/my.cnf在【mysqld】中添加如下：
+lower_case_table_names=1
+
+innodb_fast_shutdown 快速关闭Innodb
+
+
+set global concurrent_insert=2 
+join_buffer_size = 1M 关联查询缓存
+
+【常用命令】
+show table status where name='user';    查看表引擎
+show variables like '%storage_engine%'; 查看mysql默认的存储引擎
+show engines;                           查看mysql支持存储引擎
+alter table xxx engine = innodb           改存储引擎
+show engine innodb status               查看innodb状态
+show status like 'Innodb%log%'          查看innodb日志状态
+show status like 'Innodb%buf%'          查看innodb缓冲池
+
+
+show binary logs;                       查看mysql日志列表
+show binlog events in "mysqlbin.*"     查看mysql二进制日志内容
+mysqlbinlog u root p  "mysqlbin.*" > xx.txt  将二进制导成txt
+mysqlbinlog startdatetime="20160101 00:00:00" stopdatetime="20160131 23:59:59" mysqlbin.0000 (注意时间问题)
+/usr/local/mysql/bin/mysqlbinlog  base64output=decoderows v  startdate='20180627 21:08:00' stopdate='20180627 21:14:00' u root p "mysqlbin.000050" >/root/sql.txt
+
+show VARIABLES like "%slow%"            查看慢查询日志
+set global log_slow_queries = ON;       临时开启慢查询日志
+set global slow_query_log = ON;         
+set global long_query_time=0.1;    默认为10秒
+ 
+ 
+
+show profile cpu for query 4;  查看cpu使用率
+
+
+
+show grants for x@'x'; 查看用户权限
+revoke all on *.* from x@'x';
+
+drop user xxx@'xxx';删除用户
+
+flush tables with read lock; 锁库
+unlock tables; 解锁
+
+
+set global wait_timeout=432000; 5天
+set global interactive_timeout=432000;
+
+set global log_bin_trust_function_creators=1; 开启远程函数执行；
+
+show status like 'innodb_row_lock%'; 查看innodb锁
+SELECT * FROM INFORMATION_SCHEMA.PROCESSLIST where state like '%lock%';
+select * from  into outfile '/tmp/id.txt' 将查询结果导出.txt文档
+select substring_index(host':'1) as ipcount(*) from information_schema.processlist group by ip; 查看mysql数据库连接数
+show variables like '%query_cache%';    查看mysql缓存
+show status like 'qcache%';             查看mysql缓存使用情况
+其中各个参数的意义如下： 
+GLOBAL STAUS 中 关于 缓存的参数解释:
+Qcache_free_blocks: 缓存池中空闲块的个数
+Qcache_free_memory: 缓存中空闲内存量
+Qcache_hits: 缓存命中次数
+Qcache_inserts: 缓存写入次数
+Qcache_lowmen_prunes: 因内存不足删除缓存次数
+Qcache_not_cached: 查询未被缓存次数例如查询结果超出缓存块大小查询中包含可变函数等
+Qcache_queries_in_cache: 当前缓存中缓存的SQL数量
+Qcache_total_blocks: 缓存总block数
+
+/usr/sbin/mysqld verbose help |grep A 1 'Default options'
+show global variables;                  查看一些参数
+show variables like 'max_connections';  查看连接数
+show global status like 'open%tables%'; 查看打开表 在配置文件中可以使用open_files_limit来调整最大文件打开数，注意，这个参数收到操作系统的限制。
+show global status like 'open_files';   查看打开文件数 show variables like 'open_files_limit'; open_files大于open_files_limit值时，可能会出现问题。
+日志格式： MIXED MixedStatementRow
+show binary logs;                        查看binlog日志
+【set global  expire_logs_days=7;        设置日志保存7天
+ flush logs;                             清除日志】重启之后不生效。
+
+
+select table_schema table_name data_free engine 
+from information_schema.tables where table_schema 
+not in ('information_schema' 'mysql') and data_free > 0;  查看myisam碎片
+show table status from frag_test\G; 查看表状态
+optimize table xxxx;  清理碎片
+
+
+
+
+
+脏读：一个事务读取到了另外一个事务没有提交的数据
+            事务1：更新一条数据
+                             >事务2：读取事务1更新的记录
+            事务1：调用commit进行提交
+
+不可重复读：在同一事务中，两次读取同一数据，得到内容不同
+            事务1：查询一条记录
+                            >事务2：更新事务1查询的记录
+                            >事务2：调用commit进行提交
+            事务1：再次查询上次的记录
+            
+            ***此时事务1对同一数据查询了两次，可得到的内容不同，称为不可重复读
+
+不可重复读:在一个事物内、多次读取同一数据在事物没结束时另外一个事物也访问同一数据那么第一个事物中的两次读取数据之间由于第二个事物的修改、就会照成第一个事物两次读到的数据可能是不一样的。    一个事物内两次读到的数据是不一样的因此称为不可重复读。
+
+幻读：同一事务中，用同样的操作读取两次，得到的记录数不相同
+     一个事务在前后两次查询同同一个范围的时候、后一次查询看到了前一次查询没有看到的行
+            事务1：查询表中所有记录
+                              >事务2：插入一条记录
+                              >事务2：调用commit进行提交
+            事务1：再次查询表中所有记录
+            
+            ***此时事务1两次查询到的记录是不一样的，称为幻读
+              详细解释：
+                幻读是指当事务不是独立执行时发生的一种现象，例如第一个事务对一个表中的数据进行了修改，
+                这种修改涉及到表中的全部数据行。同时，第二个事务也修改这个表中的数据，这种修改是向表
+                中插入一行新数据。那么，以后就会发生操作第一个事务的用户发现表中还有没有修改的数据行，
+                就好象发生了幻觉一样。
+
+      在可重复读隔离级别下、普通的查询是快照读、是不会看到别的事务插入的数据的。因此、幻读在当前读下才会出现。
+      幻读仅专指新插入的行
+
+
+
+数据库引擎常用的有:Innodb，Myisam，
+Myisam: 
+  - 不支持事务日志，表锁，读写效率比较高，适用于大量select，不支持外键，支持全文索引。删除表数据后，文件自动清除。
+  - 通常在Myisam里，新数据会被附加到文件的结尾可是做了运行DELETE操作之后数据文件就不再是连续的数据文件会出现很多hole此时再插入新数据时按默认设置会先看这些hole的大小是否可以容纳新数据，如果可以，则直接把新数据保存到hole里，反之，则把新数据保存到数据文件的结尾。只所以这样做是为了减少数据文件的大小，降低文件碎片的产生
+
+  为什么读效率高:
+    1.不支持事务，因此不需要考虑多版本并发控制(MVCC)，这样就减少了一些锁的竞争和判断的开销，从而提高了读取的效率。
+
+Innodb: 支持事务日志，行锁，读写效率不高，使用大量update语句，，删除表后不自动清除。
+
+
+
+
+
+
+
+游标:
+   一种能从多条结果集中、每次提取一条记录的机制。遍历结果中的所有行、但他一次只处理一行  查询结果集中有多条数据、如果想对单条数据进行修改、或者说每条结果要修改的内容都不一样、这个时候就可以用游标。
+  游标只能用于存储过程和函数。
+
+
+mysql的存储过程和函数是保存在服务器中、在服务器中存储和执行、可以减少客户端和服务端之间的数据传输的消耗。
+存储过程就是一组已经保存在数据库中的语句、并且可以随时地调用。
+
+
+mysqldump:
+          locktables l 如果是MyISAM使用mysqlhotcopy 
+          singletransaction 如果是innodb  
+
+
+
+
+DDL  数据库定义语言 CREATE ALTER DROP TRUNCATE
+DML  数据库操纵语言 SELECT INSERT UPDATE DELETE LOCK TABLE
+DCL  数据库控制语言 GRANT REVOKE
+TCL  事物控制语言   SAVEPOINT  ROLLBACK SET TRANSACTION 
+
+
+
+
+Mysql层分为两层:
+  Service层:
+    连接器、查询缓存、分析器、优化器、执行器等。内置函数(如日期、时间、数学和加密函数等)、存储过程、触发器、视图等
+  存储引擎层:
+    负责数据的存储和提取。其架构模式是插件式的、支持Innodb、MyISAM等
+
+  短连接:
+      默认超时时间是8小时
+  长连接: 
+      执行过程中临时使用的内存是管理在连接对象里面的。这些资源会在连接断开的时候才释放、所以如果长连接积累下来、可能导致内存暂用太大、被系统强行杀掉(OOM)。
+      解决方法是mysql官方提供一个参数、可以释放连接
+
+
+Innodb 引擎日志
+  undo 用于存放数据被修改前的值。事物的回滚、原子性、mvcc。
+
+  ibdata 记录undo log 日志、元数据
+
+  ib_logfile0 记录redo log 日志
+
+
+redo log:
+    1、物理日志
+    2、记录做了什么改动(如把某个字段从0改成1)
+    3、循环写、空间固定会用完
+binlog: 
+    1、逻辑日志
+    2、记录是怎么修改的(记录sql语句)
+    3、追加写、文件写到一定大小后会切换到下一个、并不会覆盖以前的日志
+
+redo log 实现crashsafe   binlog 用于归档    
+
+
+innodb_flush_log_at_trx_commit 参数为1时、表示每次事物的redo log都直接持久化到磁盘 (默认1)
+sync_binlog  参数为1时、表示每次事物的binlog都持久化到磁盘 (默认1)
+
+为什么需要两阶段提交:
+  对于Innodb引擎来说、如果redo log提交完成了、事务就不能回滚(如果这还允许回滚、就可能覆盖掉别的事务的更新)
+  而如果read log直接提交、然后binlog写入的时候失败、Innodb又回滚不了、数据和binlog日志又不一致了。
+
+  如果不使用两阶段提交、那么数据库的状态就有可能和用它的日志恢复出来的库的状态不一致。
+
+  1.先写redo log后写binlog:
+  假设在redo log写完、binlog还没有写完的时候、mysql进程异常重启、由于我们前面说过的、read log写完、系统即使崩溃、仍然能够把数据恢复回来、所以恢复后这一行c的值是1。但是由于binlog没写完就crash了、这个时候binlog里面就没有这条语句。然后你会发现、如果需要用这个binlog来恢复临时库的话、由于这个语句的binlog丢失、这个临时库就会少了这一次更新、恢复出来的这一行c的值就是0、与原库的值不同。
+  2.先写binlog后写redo log:
+  如果在binlog写完之后crash、由于redo log还没写、崩溃恢复以后这个事务无效、所以这一行c的值是0。但是binlog里面已经记录了把c从0改成1这个日志、所以在之后用binlog来恢复的时候就多了一个事务处理、恢复出来的这一行c的值就是1、与原库的值不同。
+
+
+SQL标准隔离级别:
+  读未提交(read uncommitted):
+      一个事务还没提交、它的变更就能被别的事务看到
+  读提交(read committed):
+      一个事务提交之后、它做的变更才能被其他事务看到
+  可重复读(repeatable read):
+      一个事务执行过程中看到的数据、总是跟这个事务在启动时看到的数据是一致的
+      事务在执行期间看到的数据前后必须是一致的
+  串行化(serializable):
+    对于同一行记录、写会加写锁、读会加读锁。当出现读写锁冲突的时候、后访问的事务必须等前一个事务执行完成、才能继续
+
+全局锁:
+  对整个数据实例加锁
+  命令: flush tables with read lock
+  经典的使用场景是做全库逻辑备份
+
+  如果备份不加锁的话、备份系统备份的得到的库不是一个逻辑时间点、这个视图是逻辑不一致的
+
+  为什么不使用: set global readonly=true  实现全库只读
+    1、readonly的值被用来做其他逻辑、比如判断一个库是主库还是备库。因此修改global变量的方式影响面更大
+    2、在异常处理机制上有差异、如果执行FTWRL命令之后由于客户端卡死异常断开、那么mysql会自动释放这个全局锁。而如果是readonly、发生异常、会一直保持readonly状态。
+
+
+mysqldump:
+  当使用参数singletransaction的时候、导数据之前就会启动一个事务、来确保拿到一致性视图。
+  前提是引擎要支持事务.
+  singletransaction方法只适用于所有的表使用事务引擎的库
+
+
+
+表级锁 MDL(metadata lock) 作用是、保证读写的正确性
+   不需要显式所用、在访问一个表的时候会被自动加上。
+  (如果一个查询正在遍历一个表中的数据、而执行期间另一个线程对这个表结构做变更、删了一列、那么查询线程拿到的结果跟表结构对不上、肯定是不行的)
+   当一个表做增删改查操作的时候、加MDL读锁。
+   当一个表做结构变更操作的时候、加MDL写锁。
+ mysql online ddl: 对表操作增加字段等功能、不会阻塞读写
+  1、拿MDL写锁
+  2、降级成MDL读锁
+  3、真正做DDL
+  4、升级成MDL写锁
+  5、释放MDL锁
+
+  1、2、4、5如果没有锁冲突、执行时间非常短。第3步占用了DDL绝大部分时间、这期间这个表可以正常读写数据、是因此称为online
+
+
+
+
+
+Innodb行锁算法:
+  Record Lock 单个行记录上的锁
+  Gap Lock 间隙锁、锁定一个范围、但不包括记录本身、是为了防止同一事务的两次当前读、出现幻读的情况。
+  NextKey Lock 间隙锁+行锁、并且锁定记录本身、对于当前读的行查询、都是采用该方法
+
+
+
+
+查询:
+    慢查询:
+      1、索引没有设计好
+      2、SQL语句没写好
+      3、MySQL选错了索引
+    QPS突增:
+      1、关闭新业务入口
+
+可靠性:
+  只要redo log和binlog保证持久化到磁盘、就能确保Mysql异常重启后、数据可以恢复。
+
+  binlog写入逻辑:
+    事务执行过程中、先把日志写到binlog cache、事务提交的时候、再把binlog cache写到binlog文件中。
+ 
+  双1配置:
+    sync_binlog = 1
+    innodb_flush_log_at_trx_commit = 1
+    一个事务完整提交前、需要等待两次刷盘、一次是redo log(prepare阶段)、一次是binlog
+
+
+slave_parallel_workers 设置sql_thread线程数
+
+  (coordinator 就是原来的sql_thread、负责读取中继日志和分发事务、真正更新日志、变成worker线程)
+
+coordinator 分发的时候、需要满足以下这两个基本要求:
+1、不能造成更新覆盖、这就要求跟新同一行的两个事务、必须被分发到同一个worker中
+2、同一个事务不能被拆开、必须放到同一个worker中
+
+
+grant 授权:
+  1、 全局权限、应用于整个mysql实例、全局权限对应表 mysql.user  对应内存acl_users数组
+       mysql会为新连接维护一个线程对象、然后从acl_users数组里查到这个用户的权限、并将权限值拷贝到这个线程对象中。之后这个连接中执行的语句、所有关于全局权限的判断、都直接使用线程对象内部保存的权限位。
+       对已经存在连接、它的全局权限不受grant命令的影响
+
+  1、 db权限 库级别权限、对应mysql.db表 对应内存acl_dbs数组
+      每次需要判断一个用户对一个数据库读写权限的时候、都需要遍历一次acl_dbs数组、根据user、host和db找到匹配的对象、然后根据对象的权限位来判断。    
+
+
+分区表:  使用分区表的一个重要原因就是单表过大。
+        分区表和手工分表、一个是由server层来决定使用哪个分区、一个是由应有层代码来决定使用哪个分表。
+
+        两者的区别: 主要是在server层上。从server层看、打开表的行为 
+
+        应用优势、是对业务透明.
+
+
+分区策略: 
+        每当第一次访问一个分区表的时候、mysql需要把所有的分区都访问一遍。一个典型的报错情况是、打开分区表超过open_files_limit参数.
+
+        MyISAM分区表使用的分区策略、我们称为通用分区策略、每次访问分区都由server层控制。 
+
+        InnoDB引擎引入了本地分区策略。这个策略是在InnoDB内部自己管理打开分区的行为.（mysql 5.7.9开始）
+
+
+主备切换时、有这么两类错误:
+ 1062 错误是插入数据时唯一键冲突
+ 1032 错误是删除数据时找不到行
+
+
+
+PXB:
+
+在备份InnoDB数据文件时、对数据库完全没有影响、是真正的热备。
+在备份非InnoDB时会有一段时间只读(如果没有MyISAM表的话、只读时间在几秒左右)
+
+PXB支持增量备份、但是只能对InnoDB做增量。基于page的LSN号、LSN是全局递增的。page被更改时会记录当前的LSN号、page中的LSN越大、说明当前page越新。
+
+
+InnoDB和非Innodb文件的备份都是通过拷贝文件来做的、但是实现的方式不同、前者是以page为粒度做的(xtrabackup)后者是cp或者tar命令(innobackupex)xtrabackup在读取每个page时会校验checksum值、保证数据块是一致的、而innobackupex在cp MyISAM文件时已经做了flush(FTWRL)磁盘上的文件也是完整的、所以最终备份集里的数据文件读书写入完整的。
+
+备份:
+  mkdir -p /data/backup #创建备份目录
+  innobackupex defaultsfile=/etc/my.cnf user=xxx password=xxx S /tmp/mysql.sock /data/backup
+恢复:
+  innobackupex usememory=512 applylog /data/backup/201x.xx.xx/  初始化目录
+    usermemory=512意思是恢复数据指定使用的内存为512M
+    applylog 指定需要恢复的日志文件
+   
+  innobackupex defaultsfile=/etc/my.cnf copyback ./201x.xx.xx/  恢复数据
+
+增量备份:
+先全量:
+  innobackupex defaultsfile=/etc/my.cnf user=xxx password=xxx /data/backup S /tmp/mysql.sock
+增量:
+  innobackupex user=xxx password=xxx incremental /data/backup incrementalbasedir /data/backup/xxxx
+
+  恢复时、先初始化全量备份:
+    innobackupex applylog redoonly /data/backup/xxxx
+  然后初始化增量备份
+
+  最后是恢复:
+    innobackupex defaultfile=/etc/my.cnf copyback /data/backup/xxxx 
+
+
+
+
+
+拆字诀: 
+  业务隔离
+     在业务初期更多是的关注业务功能、用户量比较少、经常是单实例混部的模式、即数据库只有一个实例、并且上面存储很多业务的数据。
+
+    坏处:
+       读取性能出现瓶颈
+       业务互相影响、按业务进行拆分、各自部署实例。
+   写多读少
+     单实例读取性能再次出现瓶颈。
+    如果独立部署后、仍出现数据读取瓶颈、就可以采用读写分离的模式、然后增加从库的方式、承接读请求。   
+
+  水平拆分
+     单实例出现写入瓶颈
+     单实例容量出现瓶颈
+
+    若进一步出现写入瓶颈、就需要进行数据的水平拆分、即把数据写入拆分到多个数[据库实例来承接   
+
+  总结: 数据层面看、数据越来越多、流量越来越大、我们实际只需要做一件事"拆"、用拆容量的方式来应对数据越来越多、用拆流量的方式来应对越来越多的流量、总之就是一个拆字、把一切复杂的问题进行简化
+
+拆分表的设计: 
+   数据库进行拆分 
+     按key进行hash
+     时间
+   表拆分
+     按key进行hash
+     时间  
+  单实例单逻辑库下、存在磁盘空间不足、单库存在容量有上线。
+  而对表的拆分、一般都是按关键字段(比如主键)进行hash、或者按照时间进行拆分。
+
+  数据库拆分维度
+     冷热数据访问不均导致单位数据存储成本高
+     按时间归档
+       冷热分离
+       归档
+    当服务存在冷热数据访问不均导致单位存储成本较高时、可以按照实际对冷数据进行归档、实现存储层面的冷热数据分离。   
+
+
+
+
+
+mysql 面试题
+   忘记密码怎么办?
+    答: 修改my.cnf 添加skipgranttables 来跳过密码
+
+mysql 锁
+   INNODB_LOCKS
+   INNODB_TRX 当前执行的事务
+   INNODB_LOCK_WAITS 等待
+
+
+OLTP 联机事务处理 
+   数据库应用、主要是基本事务处理、例如银行交易
+OLAP 联机分析处理
+   数据仓库系统、主要是复杂的分析操作。
+
+
+误删表
+   drop/truncate 语句、这些信息是恢复不出数据的。因为记录的statement格式。即使配置了binlog_format=row
+
+  恢复:
+    需要使用全量备份、加增量日志的方式.
+
+
+防止误删数据
+   代码上线前、SQL必须经过审计
+   设置sql_safe_updates参数设置为on。这样一来、如果我们忘记在delete或者update语句中写where条件、或者where条件里面没有包含索引字段的话、这条件语句执行就会报错。
+
+   账号分离:
+    1、给开发同学DML权限、不给drop权限.
+    2、日常规定只使用只读账号、必要的时候才使用更新权限的账号。
+   制定规范操作:
+    1、在删除数据表之前、必须先对表做改名操作。然后观察一段时间、确保对业务无影响以后再删除这张表。
+    2、改表名的时候、要求给表名加固定的后缀如_to_be_deleted
+
+      
+
+Mysql 误删数据恢复方法:
+   数据库备份
+   binlog 
+
+  依赖:
+    binlog_format = row  # 将binlog 设置row 用于恢复
+    binlog_row_image = full  
+
+  工具:
+     binlog2sql 数据快速回滚  闪回 快速恢复  flashback
+    https://github.com/danfengcao/binlog2sql
+  参考    
+
+
+排查问题:
+  1. show full processlist;
+  2. select * 
+
+
+https://github.com/github/ghost  数据迁移
+
+Lock wait timeout exceeded; try restarting transaction
+
+
+
+
+
+主从复制的局限性:
+  1)主从延迟问题
+  2)不解决高可用问题
+    故障转移，提供failover能力。灾难恢复
+
+    MHA
+      基于Perl语言开发，一般能在30s内实现主从切换。切换时，直接通过SSH复制节点的日志。
+    MRG
+      如果主节点挂掉，将自动选择某个从改成主;无需人工干预，基于组复制，保证数据一致性。
+
+      存在的问题:
+        1.外部获得状态变更需要读取数据库（只解决内部问题，比如原来的masterIP是x现在需要换成y）  
+  3)应用则需要配合读写分离框架(如果要实现读写分离，应用侧需要配合框架修改)
+
+
+
+为什么要做数据库拆分:
+  传统数据库数据都存储在一个节点上，这就导致数据容量的上限取决于单节点容量大小的限制，在容量和性能方面不能满足海量业务要求。同时还存在以下问题:
+  1.添加一列，或者增加索引都会直接影响线上业务，导致数据库长时间无法响应
+  2.影响性能与稳定性，系统越来越慢。
+  3.无法备份，备份会自动lock数据库的所有表，
+
+
+数据拆分
+  主从结构解决了高可用，读扩展，但是单机容量不变，单机写性能无法解决。
+
+  提升容量>>分库分表，分布式，多个数据库，
+
+  降低单个节点的写压力
+
+  提升整个系统数据容量上限。
+
+
+
+扩展立方体
+  X轴: 通过clone整个系统复制，集群 (水平扩展)
+  Y轴: 通过解耦不同功能复制，业务拆分 (垂直扩展)
+  Z轴: 通过拆分不同数据扩展，数据分片。
+
+
+
+
+
+
+
+
+分库分表框架和中间件:
+  java框架层面
+     Apache ShardingSphereJDBC
+
+  中间件层面
+     Apache ShardingSphereProxy
+     MyCat
+     Cobar
+
+
+
+
+
+MyCat:  数据库中间件
+
+   它是一个开源的分布式数据库系统。是一个实现了MySQL协议的Server、前端用户可以把它看着是一个数据库代理、后端可以用MySQL原生协议与多个MySQL服务器通信、也可用JDBC协议与大多数主流数据库通信。
+
+   其核心是分库分表。将一个大表水平分割为N个小表.
+
+  默认端口:
+    8066
+
+  流程:
+    MyCat的原理中最重要的一个动词是"拦截"、它拦截了用户发送过来的SQL语句、首先对SQL语句做了、一些特定的分析: 如分片分析、路由分析、读写分离分析、缓存分析等。然后将此SQL发往后端的真实数据库、并将返回的结果做适当的处理、最终再返回给用户。  
+
+     然后业务中有Order By以及Limit翻页语法、此时就会涉及到结果集在Mycat端的二次处理、
+
+
+  多组户:
+    每个应用一个库、但应用程序只连接Mycat、从而不改造程序本身、实现多租户化。
+
+
+  ER表:
+    关系数据库是基于实体关系模型之上、通过其描述了真实世界中事务与关系、Mycat中的ER表即是来源于此。基于ER关系的数据分片策略、子表中记录与所关联的父表记录存放在同一个数据分片上、即子表依赖于父表、通过表分组、保证数据jion不会跨库操作.    
+
+
+
+ShardingSphere:
+  功能:
+    分库&分表
+    读写分离
+    分片策略定制化
+    无中心化分布式主键
+
+  分布式事务:
+    标准化事务接口
+    XA强一致事务
+    柔性事务  
+
+
+ShardingJDBC
+   定义为轻量级java框架、在Java的JDBC层提供的额外服务。它使用客户端直接数据库、以jar包形式提供服务、无需额外部署和依赖、可以理解为增强版的JDBC驱动、完全兼容JDBC和各种ORM框架.
+
+  直接在业务代码使用
+
+  缺点:
+    java only，只能用于java语言
+
+ShardingSphereProxy
+  把自己模拟成一个逻辑的数据库对外提供访问，再把接收到的操作按规则转化到不同的库和表里面，对于使用方来说就像是操作单个数据库和单个的表
+
+  作为中间件，独立部署，对业务端透明。对业务系统侵入性小。目前支持MySQL和PostgreSQL。
+  任务语言平台的系统都可以接入，可以使用mysql命令
+
+   定义为透明的数据库代理端、提供封装了数据库二进制协议的服务端版本。用于完成对异构语言的支持。
+
+   向应用程序完全透明、可直接当做MySQL/PostgresSQL使用。
+
+
+
+shardingjdbc和shardingproxy
+  1)shardingjdbc同构语言，shardingproxy异构
+  2)shardingjdbc性能要高于shardingproxy(通过jdbc连接数据库，性能相对比较高)
+
+
+
+
+分库分表的问题:
+  1)关联查询: 分库之后两张表可能都不在一个数据库中，如何使用join
+  答:
+    字段冗余: 把需要关联的字段放入主表中，避免join操作;
+    全局表: 比如一下基础表可以在每个数据库中都放一份
+    应用层组装: 将基础数据查询出来，通过应用程序计算组装
+    数据抽象: 通过ETL等将数据汇合聚集，生成新的表
+
+  2)分布式事务
+    单数据库可以用本地事务搞定，使用多数据库就只能通过分布式事务解决了。
+    答: 
+      两阶段事务提交，柔性事务等。基于可靠消息MQ的解决方案.
+  3)排序，分页
+    答:
+      先在每个分片上执行相应的函数，然后将各个分片的结果集进行汇总和再次计算，最终得到结果.
+  4)分布式ID
+    如果使用数据库自增id作为主键，分库分表之后就不行了，会出现id重复
+    答:
+      雪花算法
+      美团leaf
+      百度uid-generator
+      基于数据库自增单独维护一张ID表 
+      UUID
+  5)多数据库源
+               
+
+
+
+TM 事务管理器，协调事务，管理整个事务的生命周期。
+
+
+
+XA
+  是一种基于X/Open提出的分布式事务处理模型的标准，定义了跨多个资源管理器(数据库)的事务协调。XA规范提供了一个通用的接口，允许事务管理器(TM)来协调和管理多个资源管理器(RM)之间的事务。
+
+
+工作原理
+  XA事务使用了两阶段(2PC)提交来保证多个数据库的事务一致性。
+
+  1.第一个阶段(准备阶段)
+    事务管理器告诉所有参与事务的数据库(RM)准备提交事务，每个数据库检查自己是否能提交事务，并将事务日志写入到日志中，然后通知事务管理器已经准备好。
+  2.第二个阶段(提交/回滚阶段)
+    如果事务管理器收到了所有的TM的提交消息，事务管理器会让所有的RM提交事务。如果是任务应该RM在第一阶段没准备好，事务管理器会通知所有的RM回滚事务。
+
+
+优点:
+  使用简单，主流数据库都支持XA协议。确保数据的一致性。
+
+缺点:
+  性能低下，资源锁的时间比较长。由于TM需要等待所有参与RM的响应，如果其中一个提交失败，或者卡住会导致其他RM长时间等待，影响整体的性能。
+
+
+
+
+XA分布式事务协议
+  XA接口:
+    xa_start
+      负责开启一个事务
+    xa_end
+      结束
+    xa_prepare
+      询问RM是否准备好提交事务
+    xa_commit
+      通知RM提交事务
+    xa_rollback
+      通知RM回滚事务
+    xa_recover
+      需要恢复的XA事务
+
+XA事务处理过程
+  1.AP向TM发起一个全局事务
+  2.TM生成一个XID
+  3.然后ap就可以执行全局事务操作，在这个过程中TM就会向RM发起开启一个xa start，开启一起xa分布式事务，执行具体操作
+  4.ap提交
+  5.TM结束掉sql
+  6.TM发起prepare，等到收到所有RM回复ok
+  7.tm
+
+
+
+ShardingSphere 分布式事务
+  LOCAL：每个数据库执行自己的事务，他们之间没有协调交互。在性能上面无任何损耗，但在一致性方面没有任何保证。
+
+  XA事务： 提供强一致性。TM与RM采用XA协议进行双向通信，通过两阶段提交实现事务控制。通过xa begin在每个数据库开启事务，内部集成TM，用于协调各分支事务，并执行xa commit/rollback。在执行过程中需要对所需资源进行锁定，它更加适用短事务，对于长事务来说，整个事务进行期间对数据的独占，将会对并发场景下的性能产生一定的影响。
+
+  BASE事务：实现了柔性事务，将业务逻辑互斥操作从资源层面上移动到业务层面。通过放宽对强一致性要求，来换取系统吞吐量的提升。ShardingSphere集成了SEATA作为柔性事务的使用方案。
+
+
+
+
+
+TCC
+  可以看作在业务侧重新模拟了XA事务的处理阶段。它是在业务层引入特定控制的逻辑来解决分布式系统中事务一致性的问题。与传统的XA事务不同，TCC更加灵活，对系统性能的影响小。
+
+  TCC三个关键操作阶段：Try Confirm cncel
+
+
+
+
+
+
+
+
+
+为什么不支持连续递增
+  自增字段所依赖的计数器并不是和事务绑定的。如果要做到连续递增，就要保证计算器提供的每个主键都被使用(等待前一个事务提交成功，计数器才能为后一个事务提供新的主键，这个计数器就变成了一个表级锁)!
+
+  单调递增
+
+
+
+
+
+
+
+
+
+
+
+
+更改数据库或表字符集
+  对于每个数据库：
+    ALTER DATABASE
+        database_name
+        CHARACTER SET = utf8mb4
+        COLLATE = utf8mb4_unicode_ci;
+
+  对于每个表：
+    ALTER TABLE
+        table_name
+        CONVERT TO CHARACTER SET utf8mb4
+        COLLATE utf8mb4_unicode_ci;
+
+
+
+
+
+
+
+Mysql 统计所有数据库大小
+  select
+  table_schema as '数据库'
+  sum(table_rows) as '记录数'
+  sum(truncate(data_length/1024/1024 2)) as '数据容量(MB)'
+  sum(truncate(index_length/1024/1024 2)) as '索引容量(MB)'
+  from information_schema.tables
+  group by table_schema
+  order by sum(data_length) desc sum(index_length) desc
+
+查看指定库大小:
+  select concat(round(sum(DATA_LENGTH/1024/1024)2)'MB') as data  from TABLES where table_schema='jishi';

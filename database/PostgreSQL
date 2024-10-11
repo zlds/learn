@@ -1,0 +1,322 @@
+请求原理:
+	1.postgresql服务端可以处理来自客户端的多个并发请求、为每个连接启动("forks")一个新的进程。
+	2.主进程总是在运行并等待着客户端连接、而客户端和相关联的服务器进程则起起停停。
+
+
+
+PostgreSQL 进程模型:
+	- Postmaster 守护进程
+		1、数据库的启停。
+		2、监听客户端连接。
+		3、为每个客户端连接fork单独的postgre服务进程。
+		4、复制客户端建立连接、授权等。
+		5、管理给个子进程: WAL writer archiver、bgwriter、Logger
+	- postgres服务进程: 用于处理客户端sql语句
+
+	辅助进程:
+		bgwriter: 它会定期辅助进程协助完成一些	
+
+内存结构:
+	- 本地内存:
+		当postgres守护进程fork一个postgres服务进程时、postgres都会分配一个本地内存区域用于查询等操作。
+	- 共享内存:
+		它是由postgresql服务启动时分配、由所有后端进程共同使用。
+		- shared buffer poll: 将表和索引中的页面从持久存储装载到这里、并直接操作他们。
+		- WAL buffer: WAL文件持久化之前的缓存区
+		- CommitLOG buffer: 在commit log中保存事务的状态、并将这些状态保存在共享内存缓冲区中、整个事务处理过程中使用。	
+
+
+
+schema:
+	- 每个数据下可以有多个schema、每个schema下面可以创建表、索引、视图、函数。
+	- 同一个database下不同的schema之间可以互相访问。
+
+	为什么:
+		1.允许多个用户互不干扰的使用同一个库、从逻辑上将DB分组以方便管理.
+		2.提供database下的命名空间隔离、
+		3.PG的限制是一个连接只能连接到一个数据库、这样一个连接就可以操作不同的schema下的对象。
+
+表空间:
+	- 将DB、tables、indexs保存到指定的tablespace中、会在创建时指定数据的保存命令、也就是说表空间就是一个简单的命令。
+
+PostgreSQL:
+常用命令:
+	- \l 查看所有库
+	- \c dbname 切换库
+	- \dt 查看表
+
+	- \du  查看用户
+	
+	- create database dbname;  创建数据库
+	- drop database dbname; 删除库
+
+
+	- select * from pg_stat_activity; 查看活跃连接
+	https://til.codes/using-postgres-copy-command-to-copy-data-from-one-server-to-another/
+
+
+授权相关:
+	- 
+	- create user devadmin with password 'xxxx'; 创建用户
+	- grant all on database hero_signal to devadmin;  将db授权给xx用户
+
+
+
+PostgreSQl复制类型:
+	1、流复制
+		- 流复制、可以从实例级别复制出一个与主库一模一样的实例级的从库。
+		- 流复制同步方式:
+			1、同步
+			2、异步
+		- 实现原理:
+			流复制是将数据从wal record拷贝到数据页。
+	2、逻辑复制
+		- 区别于流复制、流复制只能复制整个postgresql实例、而不能基于部分库和部分表、逻辑部分可以基于表级别的复制。
+		- 实现原理:
+			- 逻辑复制是讲数据重新执行一次insert、update、或delete。
+			- 
+
+
+
+
+bgwriter 负责将shared buffer的脏页持久化到设备的进程、它在flush时、除了要遵循LRU算法之外、还要通过LSN全局变量的对比、来保证脏页对应的REDO记录已经flush到持久化设备了、如果发
+
+
+
+
+
+安装:
+	yum install postgresql10-server
+	yum install postgresql10-contrib postgresql10-devel
+	yum install postgis25_10  postgis25_10-devel	
+
+grant all on DATABASE inter_info to devadmin ; 数据库授权
+grant all privileges on all tables in schema public to xxx;  将库的所有表授权给用户
+
+
+查看复制流状态:
+	- select application_name, client_addr, sync_state from pg_stat_replication; 查看
+	- select * from pg_stat_replication; 查看详细
+
+
+vacuum:
+	postgresql数据库执行delete操作后、表中的记录是被标记为删除状态、但是并没有删除磁盘空间。在后面的update或insert操作中该部分的空间是不能够被重用的而VACUUM就是删除那些已经标记为删除的数据并释放空间。
+
+
+
+
+
+
+
+postgres=# select * from pg_stat_database where datname='postgres';
+	datid             | 13510                 #数据库oid
+	datname           | postgres              #数据库名
+	numbackends       | 98                    #访问当前数据库连接数量
+	xact_commit       | 14291309              #该数据库事务提交总量
+	xact_rollback     | 0                     #该数据库事务回滚总量
+	blks_read         | 536888                #总磁盘物理读的块数，这里read也可能是从page cache读取，如果这里很高需要结合blk_read_time看是否真的存在很多实际从磁盘读取的情况。
+	blks_hit          | 261717850             #在shared_buffer命中的块数
+	tup_returned      | 58521416              #对于表来说是全表扫描的行数，对于索引是通过索引方法返回的索引行数，如果这个值数量明显大于tup_fetched，说明当前数据库存在大量全表扫描的情况。
+	tup_fetched       | 57193639              #指通过索引返回的行数
+	tup_inserted      | 14293061              #插入的行数
+	tup_updated       | 42868451              #更新的行数
+	tup_deleted       | 98                    #删除的行数
+	conflicts         | 0                     #与恢复冲突取消的查询次数(只会在备库上发生)
+	temp_files        | 0                     #产生临时文件的数量，如果这个值很高说明work_mem需要调大
+	temp_bytes        | 0                     #临时文件的大小
+	deadlocks         | 0                     #死锁的数量，如果这个值很大说明业务逻辑有问题
+	blk_read_time     | 0                     #数据库中花费在读取文件的时间，这个值较高说明内存较小，需要频繁的从磁盘中读入数据文件
+	blk_write_time    | 0                     #数据库中花费在写数据文件的时间，pg中脏页一般都写入page cache，如果这个值较高，说明page cache较小，操作系统的page cache需要更积极的写入。
+	stats_reset       | 2019-04-09 14:06:53.416473+08 #统计信息重置的时间
+
+
+
+
+pg_stat_user_tables关键指标
+	relid               | 16390                  #表的oid
+	schemaname          | public                 #模式名称
+	relname             | pgbench_accounts       #表名
+	seq_scan            | 0                      #这个表进行全表扫描的次数
+	seq_tup_read        | 0                      #全表扫描的数据行数，如果这个值很大说明对这个表进行sql很有可能都是全表扫描，需要结合具体的执行计划来看
+	idx_scan            | 29606482               #索引扫描的次数
+	idx_tup_fetch       | 29606482               #通过索引扫描返回的行数
+	n_tup_ins           | 0                      #插入的数据行数
+	n_tup_upd           | 14803241               #更新的数据行数n
+	n_tup_del           | 0                      #删除的数据行数
+	n_tup_hot_upd       | 14638544               #hot update的数据行数，这个值与n_tup_upd越接近说明update的性能较好，更新数据时不会更新索引。
+	n_live_tup          | 100012319              #活着的行数量
+	n_dead_tup          | 2403437                #死亡的行数量
+	n_mod_since_analyze | 0                      #上次analyze的时间
+	last_vacuum         |                        #上次手动vacuum的时间
+	last_autovacuum     |                        #上次autovacuum的时间
+	last_analyze        |                        #上次analyze的时间
+	last_autoanalyze    | 2019-04-09 14:12:30.402387+08  #上次自动analyze的时间
+	vacuum_count        | 0                      #vacuum的次数
+	autovacuum_count    | 0                      #autovacuum的次数
+	analyze_count       | 0                      #analyze的次数
+	autoanalyze_count   | 1                      #自动analyze的次数
+
+
+
+查看活跃连接:
+	select  *  from pg_stat_activity where datname='traffic_platform' and state='active' ;
+
+
+查看表状态:
+	select relname,seq_scan,idx_scan,n_tup_ins,n_tup_upd,n_tup_del,n_live_tup from pg_stat_user_tables  where relname = 'site_lock_info';
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+如果主库有大量的数据写入的时候、因为wal传送速度和备库应用的速度比较慢。这个时候就会造成日志堆积、如果已经设置了wal日志的归档的话、很有可能备库要应用的日志被主库给归档了、或者已经被删除了、这个时候备库就不可用。
+
+
+
+
+
+
+
+
+
+
+
+PostgreSQL数据库升级
+	1.一种升级方法是在原来的库中备份、然后在另一个版本中重新加载。必须使用pg_dumpall之类的逻辑备份工具、文件系统级别备份方法将不起作用。
+
+
+
+
+
+
+
+
+
+
+
+WAL 预写日志
+	是记录对数据的修改日志、这样当数据库发生崩溃时、可以通过该日志进行恢复。
+
+
+
+	提供持久性和原子的事务。
+
+	1.记录每一次修改的数据。
+	2.wal日志也叫做xlog
+
+
+	WAL segment file 
+		为了便于管理、pg把事务日志文件划分为N个segmeng、每个segment称为wal segment file、每个wal segment file默认为16MB
+	XLOG Record
+		可以理解为pg中的每一个变更都对应一条XLOG Record。PG读取这些XLOG Record进行故障恢复/PITR等操作.
+	WAL buffer
+		WAL缓冲区、不管是wal segment file的header还是XLOG Record都会先行写入到wal缓存区中、在合适的时候在通过wal writer写入到wal segment file中。		
+
+
+
+
+
+
+
+
+
+pg_log   数据库运行日志
+pg_xlog  wal日志
+pg_clog  事务提交日志，记录的是事务的元数据。
+
+
+
+事务提交:
+	synchronous_commit  
+		off 异步提交，等3*wal_writer_delay落盘。
+		local  本地落盘即可提交
+		on 同步slave收到日志并日志落盘
+		remote_apply 同步slave收到日志并应用到page上
+		remote_write 同步slave收到日志并应用到page上，且page落盘。
+
+日志记录类型:
+	logical
+	physical 
+	physilogical	是物理页上的逻辑变更，相比于physical更加灵活，占用空间小，但是必须在一个有效的页上进行恢复。	
+
+
+	synchronous_standby_names 
+
+
+
+wal writer进程
+	这个服务进程间歇的运行，将wal buffer刷新到磁盘上，主要是防止同时提交太多，导致磁盘IO过载。
+	
+
+
+
+
+Postgresql 批量插入限制
+	INSERT 行数 x 参数(列) <= 32767
+	SELECT 参数数量 <= 32767 
+
+
+删除用户:
+	- 删除用户，必须先删除或重新将改用户拥有的对象分配给其他用户。并且授予该角色的所有权限都必须撤销。
+	alter table owner to xxx
+	https://www.postgresql.org/docs/9.1/role-removal.html
+
+
+
+
+
+
+
+docker 拷贝数据启动报错
+
+gosu postgres pg_resetwal -f /var/lib/postgres/data
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+

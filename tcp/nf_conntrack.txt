@@ -1,0 +1,98 @@
+sh ./arch/x86/boot/install.sh 3.16.53 arch/x86/boot/bzImage \
+        System.map "/boot"
+ERROR: modinfo: could not find module freq_table
+ERROR: modinfo: could not find module xt_NOTRACK
+ERROR: modinfo: could not find module xhci
+
+
+
+# iptables -t nat -nL 提示
+
+iptables v1.3.5: can’t initialize iptables table `nat’: Table does not exist (do you need to insmod?)
+Perhaps iptables or your kernel needs to be upgraded.
+
+解决方法: 编译内核时加入以下模块
+Linux Kernel Configuration
+    -> Networking support
+        -> Networking options
+            -> Network packet filtering framework(netfilter)
+                -> Core netfilter configuration
+                    -> Netfilter connection tracking support
+                    -> Netbios name service protocal support(new)
+                    -> Netfilter Xtables support (required for ip_tables)
+
+
+Linux Kernel Configuration
+    -> Networking support
+        -> Networking options
+            -> Network packet filtering framework(netfilter)
+                -> IP: Netfilter Configuration
+                    -> IPv4 connection tracking support (require for NAT)
+                    -> IP tables support (required for filtering/masq/NAT)
+                -> Full NAT
+                    -> MASQUERADE target support
+                    -> REDIRECT target support
+
+
+make -j2
+
+make -j2 all
+
+make -j2 modules_install
+
+make -j2 install
+
+升级完成后重启重新配置nat即可。
+
+
+nf_conntrack：
+              用于跟踪一个连接的状态。连接状态跟踪可供其他模块使用、最常见的两个使用场景是iptables的nat和state模块
+
+iptables的nat通过规则来修改目的原地址、光修改地址不行、还需要能让回来的包能路由到最初的来源主机、这就需要借助nf_contrack来找到原来那个连接的记录才行。
+具体操作方法如下：
+
+1、修改/etc/sysconfig/iptables 文件中的-A INPUT -m state --state ESTABLISHED,UNTRACKED(增加这个参数) -j ACCEPT 行。增加红色字体中的部分，保存并restart iptables 。
+
+2、运行下面的语句：
+
+iptables -t raw -A PREROUTING -p tcp -m multiport --dports 80,3128 -j NOTRACK
+iptables -t raw -A PREROUTING -p tcp -m multiport --sports 80,3128 -j NOTRACK
+iptables -t raw -A OUTPUT -p tcp -m multiport --dports 80,3128 -j NOTRACK
+iptables -t raw -A OUTPUT -p tcp -m multiport --sports 80,3128 -j NOTRACK
+
+如果只是一个端口，改为下面的语句：
+iptables -t raw -A PREROUTING -p tcp -m tcp --dport 80 -j NOTRACK
+iptables -t raw -A OUTPUT -p tcp -m tcp --sport 80 -j NOTRACK
+iptables -t raw -A PREROUTING -p tcp -m tcp --sport 80 -j NOTRACK
+iptables -t raw -A OUTPUT -p tcp -m tcp --dport 80 -j NOTRACK
+
+比如所有 lo 接口上的连接：
+iptables -t raw -A PREROUTING -i lo -j NOTRACK
+iptables -t raw -A OUTPUT -o lo -j NOTRACK
+注：第1步很重要，如果第1处没改，执行后面的语句会造成相应的端口不能访问。我使用该方法时，就因为没有执行第一步的操作，造成web访问不能使用。
+
+
+http://ww4.sinaimg.cn/bmiddle/e59371ccgw1eqfi32stuqj20c89g34qq.jpg
+
+
+
+
+iptables -t raw -A PREROUTING -p tcp -m multiport --dports 80,443 -j NOTRACK
+iptables -t raw -A PREROUTING -p tcp -m multiport --sports 80,443 -j NOTRACK
+iptables -t raw -A OUTPUT -p tcp -m multiport --dports 80,443 -j NOTRACK
+iptables -t raw -A OUTPUT -p tcp -m multiport --sports 80,443 -j NOTRACK
+
+
+
+
+dmesg |grep nf_conntrack
+如果输出值中有“nf_conntrack: table full, dropping packet”，说明服务器nf_conntrack表已经被打满。
+
+
+ 查看nf_conntrack表最大连接数
+$ cat /proc/sys/net/netfilter/nf_conntrack_max
+
+# 查看nf_conntrack表当前连接数
+$ cat /proc/sys/net/netfilter/nf_conntrack_count
+
+netstat -s |grep timestamp

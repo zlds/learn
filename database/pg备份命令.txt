@@ -1,0 +1,33 @@
+$ pg_rman backup --pgdata = / home / postgres / pgdata_sby --backup-mode = full --host = master --standby-host = localhost --standby-port = 5432
+
+
+
+
+./pg_rman backup -b full  --standby-host=127.0.0.1 --standby-port=5432 -h 1.1.1.1 -p 5432 -U postgres -d postgres
+
+
+export PGPASSWORD=x
+
+
+-gr
+
+export PGPASSWORD=x         # 超级用户密码  
+
+pg_rman backup \    
+-b full \                          # 全量备份   
+-B /data05/digoal/pgstdbak \       # 备份目录  
+-D /data04/digoal/pg_root_1922 \   # 备库的$PGDATA  
+-s \                               # 备份pg_log  
+-Z \                               # 压缩  
+--keep-data-generations=3 \        # 保留3个全量备份，删除不需要的全量备份  
+--keep-data-days=10 \              # 保证能恢复到10天内的任意时间点，删除不需要的  
+--keep-arclog-files=30 \           # 保留最近30个归档文件  
+--keep-arclog-days=20 \            # 保留20天内的归档文件  
+--keep-srvlog-files=10 \           # 保留最近10个日志文件(pg_log)  
+--keep-srvlog-days=20 \            # 保留20天内的日志文件(pg_log)  
+--standby-host=127.0.0.1 \         # 如何连接standby  
+--standby-port=1922 \              # 如何连接standby  
+-h 127.0.0.1 \                     # 如何连接primary  
+-p 1921 \                          # 如何连接primary  
+-U postgres \                      # 如何连接primary, standby(超级用户)  
+-d postgres                        # 如何连接primary, standby(database name)

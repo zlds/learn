@@ -1,0 +1,8 @@
+查看进程运行在那颗cpu上:
+	ps axo pid,comm,psr 
+
+进程绑定CPU命令:	
+	taskset -p -c 1,3 xxx  -c 指定cpu编号、后面跟着pid  (重启无效)
+
+CPU隔离:
+	在/etc/grub.conf中kernel的末尾添加isolcpus=x	

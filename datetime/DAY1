@@ -1,0 +1,27 @@
+DAY1
+
+面试官问、Linux中的crontab实现每5秒执行一次
+1.linux crontab 每5秒执行一次
+- 可以通过sleep 去执行、
+实例:
+#!/bin/bash
+while true
+do
+   date >>./2.txt
+   sleep 5
+done
+
+nohub xx.sh &
+
+2.Docker 健康状态检查
+- UP 运行状态
+- Exited  退出状态
+
+注意 UP状态并不能代表应用程序健康
+
+用来检测容器里面的程序是否正常
+HEALTHCHECK --interval=5s  --timeout=2s  --retries=3 --start-period=10 \
+  CMD curl --silent --fail localhost:9200/_cluster/health || exit 1 # -f 
+
+Linux 使用df 查看磁盘空间剩余为负数是怎么问题？
+答: linux 磁盘分区有保留区的概念、会给root或指定用户预留5%或更大的空间、当使用到保留空间、fdisk将会出现负数。

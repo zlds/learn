@@ -1,0 +1,18 @@
+systemd:
+	vim /usr/lib/systemd/system/xxx.service
+
+	[Unit]
+	Description= xxx 服务简单描述
+	After= xxx 服务的依赖、也就是说等依赖的服务启动之后在启动
+
+	[Service]
+	Type: XXX
+		- simple 默认值、该服务将立即启动、服务进程不会fork。
+		- forking 除非你确定当该服务无法满足需求、且父进程退出后服务启动成功。
+	ExecStart= xxx 服务启动命令
+	ExecStop= xxx 服务停止命令
+
+	[Install]
+	WantedBy=xxx
+
+	

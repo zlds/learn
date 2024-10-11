@@ -1,0 +1,425 @@
+ZooKeeper 
+	是一个开源的分布式协调服务、它是集群的管理者、监视着集群中各个节点状态、根据节点状态提交反馈进行下一步合理操作。
+ 	
+
+
+Zookeeper 使用场景:
+	 注册中心 发布/订阅
+	 负载均衡
+		是指软负载、为了保证高可用、每台服务端都会去zookeeper上注册临时节点、每台客户端都去zookeeper节点上获取节点、然后从列表中选择一个来执行、当其中一个挂了之后、会通知客户端
+	 统一命名服务
+		 是指分布式系统中、能够产生唯一的名称
+
+	 分布式锁
+		 得益于ZooKeeper为我们保证了数据的强一致性。锁分为两类、一个是保存独占、另一个是控制时序。
+		 就是最终只有一把锁、、通常把zk上的一个znode看作是一把锁、通过create znode的方式来实现。
+
+
+节点角色:
+ Leader    提供读写服务、负责投票的发起和决议
+ Follower  为客户端提供读服务、如果是写服务转发给Leader。参与投票
+ Observer   为客户端提供读服务
+			在不伤害写性能的情况下扩展zookeeper。
+			不参与投票。接收客户端的读写请求
+			(zk写入需要满足大多数、当集群规模比较大时、因为网络开销等、会导致性能下降、而observer不参与投票、写入时、等待投票结果。)
+
+选举触发:
+ 服务器初始化启动
+ 服务器运行期间无法和Leader保持连接
+
+选举判断:  (myid,ZXID)
+ ZXID zxid大的服务器优先成为Leader   zookeeper事务id、是一个64位数字、有Leader统一分配、全局唯一、递增。
+ myid 如果zxid相同、那么就比较myid myid较大的成为Leader。每个节点都需要一个唯一标识符
+
+选举流程:
+1、各个服务器节点、广播自己的优先级标识(sid,zxid)
+2、服务器节点收到其他广播消息后、跟自己的优先级对比、自己优先级低、则变更当前节点投票的优先级(sid,zxid)、并广播变更后的结果
+3、当任意一个服务器节点收到的投票数、超过了法定数量(quorum)、则升级为leader、并广播结果。
+
+
+顺序一致性: 
+	 来自任意特定客户端的更新都会按其发送顺序被提交保持一致
+	如一个客户端将znode、z的值更新为a、在之后的操作中、它又将z的值更新为b、则没有客户端能够在看到z的值是b之后在看到值是a。
+	 zookeeper使用改编的两阶段提交协议来保证server节点的事务一致性
+	 每个follower节点都会有一个先进先出的队列来存放收到的事务请求、保证执行事务的顺序
+
+1、全局串行化所有的写操作
+2、保证同一个客户端的指令被FIFO执行(以及消息通知的FIFO)
+
+单一系统映像:
+ 一个客户端无论连接到那一台服务器、它看到的都是同样的系统视图。
+
+
+事务快照:
+	 数据快照是zk数据存储中一个非常核心的运行机制。
+	 数据快照用来记录服务器上某一时刻的全量内存数据内容、并将其写入到指定的磁盘文件中、可以通过dataDir配置文件目录。
+	 snapCount设置两次快照之间的事务操作个数、zk节点记录完事务时、会统计判断是否需要做数据快照(距离上次快照、事务操作次数等价于snapCount/2~snapCount中的某个值时、会触发快照生成操作)
+
+ZAB协议
+	 是为分布式协调服务Zookeeper专门设计的一种支持崩溃恢复的一致性协议。
+
+	 ZAB协议的消息广播是一个原子性广播协议、类似一个二阶段提交过程。客户端的写请求、全部由Leader接收、Leader将请求封装成一个事务Proposal将其发送给所有Follwer、然后根据所有Follwer的反馈、执行操作。
+
+quorum: 集群中超过半数的节点集合
+FastLeaderElection在通信组件的基础上封装了一层、读线程WorkerReceiver和写线程WorkerSender。
+
+写原理:
+	1、如客户端请求follower写请求
+	2、follower将写请求转发给leader
+	3、leader生成一个新的事务并为这个事务生成一个唯一的zxid
+	4、leader将这个事务发送给所有的follows节点
+	5、follower节点将收到的请求事务加入到历史队列中、并发送ack给leader
+	6、当leader收到大多数follower的ack消息、leader发送commit请求
+	7、follower收到commit请求时、会判断该事物的zxid是不是比历史中的任何事务的zxid都大、如果是则提交、如果不是则等比它大的事务的commit
+
+
+
+配置参数:
+clientPort=2181  客户端连接端口
+dataDir=xxx      存储内存中数据快照的位置。myid文件也存在这个目录里。
+tickTime=2000    zk中的一个时间单元、以毫秒为单位。它用于调节心跳和超时。例如、最小会话超时将是两个滴答。
+
+dataLogDir 		 事务日志写入dataLogDir而不是dataDir。可以使用专门的日志设备、并且可以避免日志记录和快照之间的竞争。
+
+globalOutstandingLimit
+客户端的速度比zookeeper提交请求更快、特别是有很多客户端时。为了防止zookeeper因排队请求过大而耗尽内存、zookeeper将限制客户端、系统中只能有globalOutstandingLimit未完成的请求。默认限制为1000
+
+maxClientCnxns     限制单个ip对zookeeper并发连接数
+
+minSessionTimeout  客户端最小会话超时时间(以毫秒为单位)。默认为tickTime的2倍
+maxSessionTimeout  客户端最大会话超时时间(以毫秒为单位)。默认为tickTime的20倍
+
+集群选项:
+initLimit 允许Follwer从leader同步最新数据时、Leader允许initLimit*tickTime的时间内完成。如果同步的数据量很大、可以相应的把这个值设置的大一些。
+
+leaderServes 默认情况下、Leader是会接受客户端连接、并提供正常的读写服务。但是、如果你想让Leader专注于集群中机器的协调、可以设置为no。
+
+syncLimit 允许Follower和observer与Leader交互时的最大等待时间。
+
+server.01=zookeeper01:2888:3888  .01是myid 2888用来连接领导者  3888用于选举领导者
+
+
+zookeeper 默认jvm堆最大内存为系统内存的四分之一 如4g就是1g 8g就是2g
+
+
+znode:
+	 zookeeper的节点被称为znode、是zoookeeper的数据节点。zookeeper的核心、客户端连接之后会创建znode、其实就是文件夹、用户存放数据。
+
+Znode 有四种类型:
+	PERSISTENT 持久节点 
+		一旦创建就会一直存在，即使回话断开，该节点不会被删除。
+
+	EPHEMERAL 临时节点
+		与客户端回话绑定，回话消失则节点消失。并且，不能创建子节点
+
+	PERSISTENT_SEQUENTIAL 持久化顺序节点
+		当客户端请求创建这个节点A后、zookeeper会根据parentznode的zxid状态、为A节点生成一个全目录唯一的编号
+
+	EPHEMERAL_SEQUENTIAL 临时的连续节点
+		临时顺序节点
+
+	 顺序节点:
+		记录子节点的先后顺序
+		每次创建顺序节点时、会在路径后自动添加计数器(10位数)、0000000001,0000000002 这个计数器保证在同一个父节点下是唯一的。
+
+ZK: 规定ZK的数据大小不能超过1M		
+
+
+Znode组成:
+	 协调数据: 业务相关
+     状态数据: 数据的变更版本号
+
+
+
+zookeeper 集群状态:
+	LOOKING
+	 不确定Leader状态。该状态下的服务器认为当前集群中没有Leader、会发起Leader选举
+	FOLLOWING
+	 跟随者状态。表明当前服务器角色是Follwer、并且它知道Leader是谁。
+	LEADING
+	 领导者状态。表明当前服务器角色是Leader、它会维护与Follower间的心跳
+	OBSERVING
+	 观察者状态。表明当前服务器角色是Observer与Folower唯一的不同在于不参与选举、也不参与集群写操作时的投票
+
+zookeeper写入过程
+	第一阶段: 数据写入广播给所有Follower节点。可以写入的节点返回确认信息ACK;
+	第二阶段: Leader收到一半以上的ACK信息确认写入可以生效，向所有节点广播COMMIT，将提案生效。
+
+
+	细节:
+		leader给每个事务proposal分配一个全局单调递增且唯一的ID(ZXID)，每个事务按照先后顺序来进行处理，Follower在接收到Proposal后，会以事务日志的形式写入本地磁盘，并在写入完成之后反馈给Leader一个ack；当leader接收到半数Follower发送ack之后，就会广播一个commit，同时自身也会完成对事务的提交。
+
+
+		不能丢的proposal
+			如果各个Follower在收到commit命令前leader就挂了，导致剩下的服务器并没有执行这条消息：
+				1.选举拥有最大的ZXID的proposal的节点作为新的Leader。
+				2.新的leader会将自己未提交的proposal进行commit
+				3.然后先将自己有但是follwer没有的proposal发送给Follower，再将proposal的commit命令广播给follower节点
+		丢弃proposal
+			当leader节点提出一个proposal后立即崩溃，导致follower节点都没有收到这个proposal。当该节点恢复后，连接新的leader，如果他依旧保留这个proposal的状态，需要丢弃。				
+
+
+	为什么是最终一致性:
+		Leader向客户端返回写入成功后，可能有部分Follower还没有写入最新的数据，所以是最终一致性。
+	
+	顺序一致性:
+		每个节点都是严格按照事务发起的顺序执行。		
+
+
+
+同步方式:
+	DIFF 差异化同步方式，如果follower的记录和leader的记录相差的不多，使用增量同步的方式将一个一个写请求发送给follower
+	TRUNC 如果follower的zxid是领先于当前的leader的，需要follower自行把多余的部分给截断，降级到和leader一致
+	SNAP 如果follower的记录和当前leader相差太多，leader直接将自己的整个内存数据发送给follower。
+
+
+
+
+
+zookeeper读写一致性
+	zookeeper是支持读写一致性，即严格客户端成功执行了write请求后会立即感知到自己所做的更新，Zookeeper不会返回过期数据给它。
+
+	不保证跨客户端之间的同步读写一致性。如客户端A对某znode执行更新操作，客户端B读取该znode时，zookeeper不保证读取到最新的znode值，如果要实现这种一致性，你需要让B先调用sync之后在读取。
+
+
+
+
+
+Zookeeper 作为注册中心的不足
+	1、多机房网络规划后、强一致性引起的服务注册机制失效
+	2、持久化存储和事务日志: 事务日志: CP模式、半数节点写入成功、采用事务日志、2PC提交。
+	定期dump内存数据到硬盘、保持数据一致性。
+	3、服务探活
+		利用session活性心跳和临时节点机制来进行服务探或。就是说绑定在TCP长连接活性探测。
+
+
+WARO (Write All Read one)、是一种简单的副本控制协议。当Client请求向某副本更新数据、只有当所有的副本都更新成功之后、这次写操作才算成功、否则视为失败。WARO优先保证读服务、因为所有的副本更新成功、才能视为更新成功、从而保证了所有的副本一致性、这样的话、只需要读任何一个副本上的数据即可。
+
+Quorum 定义
+	 加速有N个副本、更新操作x在W个副本中更新成功之后、才认为此次更新操作成功
+
+
+
+
+服务对比:
+	 健康检查
+		 zookeeper 长连接(弱)
+		 euerka 可配置支持  check http
+		 etcd 连接心跳
+	 CAP
+		 zookeeper CP
+			Leader节点接收数据，然后同步写到其他的Follower节点去。一旦leader挂掉，就要进行选举，在新选举leader未完成前，集群是不可用的，当leader选举好了，集群就可以恢复写了，保证了数据的一致性，这个过程为了保证C，牺牲了A。
+		 etcd   CP
+			
+		 euerka  AP
+		 	Eureka是peer模式，可能数据还没同步完成，结果自己宕机了。此时客户端可以从其他节点拉取注册信息，只是不是新的而已。
+
+
+
+
+
+Eureka 集群
+	 几个节点挂掉不会影响正常节点的工作、剩余的节点依然可以提供注册和查询服务。
+	 客户端在向某个Eureka注册或认购发现连接失败、则会自动切换其他节点、只要有一台Eureka还在、就可以保证注册服务的可用性、只是查询的信息可能不是最新的。
+
+	Eureka 一致性协议
+		 Raft 
+
+	Eureka 自我保护:
+		 默认时间90秒没有收到服务心跳、会下线服务。但是当网络发生分区故障时、如服务本身正常但是和eureka之间不能正常通信、会将服务全部下线、而自我保护机制、就是防止网络分区时将所有服务下线。
+		 自我保护是应对异常网络的安全保护措施。
+
+
+	Eureka 注册
+		 当客户端向Eureka注册时、客户端将提供有关自身的元数据、如主机、端口、运行状态、URL等。
+
+	续约
+		每隔30秒发送一次心跳来完成续约。
+	获取注册表信息
+		client从Eureka server获取注册表信息，并将其缓存到本地。数据交互支持JSON/XML格式进行通讯。默认压缩json格式。	
+
+
+Eureka 对比 zookeeper 优势
+	 对服务监控状态检查:
+		1、zk是长连接
+		2、Eureka 可以自定义: 如url检测
+	 CAP 
+		1、zookeeper是强一致CP
+		2、Eureka是最终一致  AP
+
+
+
+Eureka集群模式:
+	是peer to peer，集群里面的每个机器的地位都是相等的，不存在什么主从；每个服务可以向任意一个Eureka实例进行服务注册和服务发现，集群里面任意一个Eureka实例接收到写请求以后，会自动同步给其他所有的Eureka实例.
+
+
+
+
+
+Eureka:
+	客户端注册: 服务名，ip + port、运行状态、url等信息。
+
+
+	什么时候发起注册
+	1)启动初始化的时候发起注册
+	2)客户端缓存实例租约信息变更了，发起注册
+	3)发送心跳心跳信息返回404，发起注册
+
+	心跳时间30s(默认)，向服务端发送一次心跳。如果服务端90s内没有收到client的心跳，会认为改节点失效注销实例。
+
+
+	服务端:
+		负责处理客户端注册请求，心跳，状态更新，取消，删除，查询注册等相关操作。
+		存储注册表信息，集群之间数据同步
+
+	配置参数:
+		eureka.server.enableselfpreservation: true/false 是否关闭注册中心的自我保护机制，默认true
+		eukeka.instance.preferipaddress: true 表示使用ip地址来访问provider实例。
+		eureka.instance.leaserenewalintervalinseconds: 30s 心跳时间
+
+
+		客户端配置参数:
+			eureka.client.fetchregistry:true 注册中心获取注册信息
+			eureka.client.registeryfetchintervalseconds:30s 从eureka server获取注册中心的时间间隔。
+			eureka.client.eurekaserverconnecttimeoutseconds:5s 连接eureka server 超时时间
+			eureka.client.eurekaserverreadtimeoutseconds: 8s 读取eureka server超时时间
+
+			eureka.clent.serviceurl.defaultZone: 注册中心地址
+
+
+
+
+ETCD:
+	 分布式键值数据库、一致性。
+	场景:
+		1、服务发现
+		2、共享配置
+		3、一致性保障(如数据库选主、分布式锁)
+
+
+	一致性协议:
+		Raft一致性算法
+
+	后端健康检查:
+		 长连接
+
+	CAP 理论:
+		 CP
+	访问接口:
+		http/grpc
+
+	默认端口:
+		客户端访问: 2379	节点通信: 2380	
+
+
+	原理:
+		 领导者状态
+		 跟随者
+		 候选状态	
+
+	选举:
+		1、刚启动时、节点处于follower状态、如果一段时间没有收到leader的心跳、将触发选举、然后将自己切换为候选节点、向集群中其他的follower节点发送请求、询问其是否选举自己成为leader
+		2、当收到集群半数以上的投票后。节点成为leader。
+		3、leader定时向follower发送心跳。
+		4、
+
+Consul:
+	
+	服务发现，配置中心，数据中心
+	关键特性：
+		服务发现
+		健康检查
+		KV存储
+		多数据中心
+		安全的服务间通信。
+	
+	CAP理论:
+		 AP
+	协议:
+		 交换信息goss
+		 一致性Raft							
+
+
+
+
+
+Nacos
+	一致性协议: CP+AP
+	健康检查: TCP/HTTP/MYSQL/Client Beat
+	访问协议: HTTP/DNS
+
+
+
+
+
+	Data ID 
+		可以理解为应用的配置文件名
+		默认格式:
+			${spring.application.name}.properties
+			${spring.application.name}-${spring.profiles.active}.properties
+
+
+
+
+
+
+
+
+Raft
+	三种角色
+		leader
+			正常情况下只存在一个leader，其他均为follower，所有客户端都与leader进行交互。
+			定时发送心跳给Follower
+		follower
+			在刚开始选举时，所有节点都是follower，每个节点都有一个定时器，每次收到来自leader的信息就会更新该定时器。如果超时，那就认为leader已死或者不存在，该节点就会转变成Candidate。
+			竞选超时时间: 150ms~300ms。
+		candidate
+			当follower在一段时间内未收到leader心跳。则判断leader可能故障，发起选主投票，节点状态从Follower变为Candidaate状态，直到选主结束。
+
+
+
+
+
+
+
+Paxos:
+	 算法是基于消息传递且具有高效容错特性的一致性算法。
+	 节点角色:
+		1、Proposer 提案者
+			 在流程开始时、Proposer提出议案、也就是更改某个值、提案者可以有多个、不同的提案者可以提出不同的甚至矛盾的value。如一个提议为X=1、另一个提议为X=2、但对同一轮Paxos过程、最多只有一个value被批准。
+		2、Acceptor 批准者
+			 在集群中、Acceptor有N个、Acceptor之间完全对等独立、Proposer提出的value必须获得超过半数(N/2+1)的Acceptor批准后才能通过.
+		3、Learner  学习者
+			 Learner不参与选举、而是学习被批准的value、在Paxos中、Learner主要参与相关的状态机同步流程。
+
+	选举过程:
+		分为两个部分、准备阶段和选举阶段
+
+		Phase1 准备阶段
+			Proposer生成全局唯一且递增的ProposallID、向Paxos集群的所有机器发送Prepare请求、这里不携带value、只携带N即PreposallID
+
+	选举流程白话:
+		 假设有A、B、C、D、E、5个节点.
+		1、提议阶段:   
+			D收到了客户端的请求、如张三购买一张票。这个时候D节点开始发起提议、提议ID为1D。注意D并没有把购买者的名字告诉其他机器。
+		2、
+			 其他机器收到这个提议后、他们发现之前并没有收到这个提议、于是同意了这份提议。将ID记录下来、承若不在接受ID < 1 的提议。
+			 向D回复OK。
+		3
+			 D 收到其他机器的回复后、发现加上自己的同意、已经超过半数同意。那么D任务这个提议已经被通过了、于是进入Commit阶段
+			 Commit阶段、D向所有机器发出了一个决议.这个决议的ID是1D、决议内容: 将票卖给张三.
+
+
+
+
+zookeeper线上故障错误
+	Unable to read additional data from client, it probably closed the socket		
+
+
+
+
+
+
+
+			 		
+	

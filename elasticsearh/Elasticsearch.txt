@@ -1,0 +1,330 @@
+索引: 
+    - 是文档的容器、是一类文档的集合
+    - 是组织数据的逻辑空间(就好比数据库)
+    - 1个elasticsearch的索引有1个或者多个分片(默认是5个)
+    - 每个索引都有自己的Mapping定义、用于定义包含的文档的字段名和字段类型
+
+tpye:
+    就像数据库中的表、用于逻辑上隔离索引中的数据。给定一个type、它的所有文档会拥有相同的属性(就像表的schema)    
+
+    
+分片:
+    - 对应实际存储数据的Lucene的索引、分片自身就是一个搜索引擎
+    - 每个分片有0个或者多个副本(默认是1个)
+     
+索引的Mapping与Settings
+  - Mapping 定义文档字段的类型 (索引中、所有文档字段的类型结构)
+  - Setting 定义不同的数据分布 (如要用多少个分片、数据是怎么分布的)
+
+Mapping  类似数据库中的schema的定义
+- 定义索引中的字段的名称
+- 定义字段的数据类型。例如字符串、数字、布尔
+- 字段、倒排索引的相关配置
+
+Segment: 
+- 在Lucene中、单个倒排索引文件被称为Segment. 是自包含、不可变的.
+- 多个Segments汇总在一起、称为Lucene的Index、其对应的就是ES在的shard
+- Commit Point 记录Segments信息
+
+删除的文档信息、保存在.del文件中、这就是删除索引、其实并为真正删除
+
+
+什么是Refresh: es在写入文档时、会先写到index buffer的内存空间中
+
+  - 将Index buffer写入Segment的过程叫Refresh。Refresh不执行fsync操作.
+  - Refresh 频率默认1秒发生一次。这也是为什么es被称为进实时的搜索。
+  - 如果系统有大量的数据写入、那就会产生很多的Segment
+  - Index Buffer被占满时、会触发Refresh、默认值是JVM的10%
+
+什么是Transaction Log  写入index buffer时、同时将数据写入到Transaction中、保证数据持久性
+- Segment写入磁盘的过程相对耗时、所有会先写入到文件系统缓存中、Refresh时、先将Segment写入缓存以开放查询
+- 为了保证数据不会丢失、所以在index文档时、同时写入Transaction Log。高版本中、每个分片有一个Transaction Llog
+- 在ES Refresh时、index buffer被清空、transaction log不会清空
+
+什么是Flush:
+- 调用Refresh index buffer清空并且Refresh
+- 调用fsync、将缓存中的Segments写入磁盘
+- 清空 Transaction Log
+- 默认30分钟调用一次
+- Transaction Log满(默认512MB)
+
+字段类型:
+  简单类型:
+    - Text / Keyword
+    - Date
+    - Integer / Floating
+    - Boolean
+    - IPv4 & IPv6
+  复杂类型-对象和嵌套对象
+    - 对象类型 / 嵌套类型
+  特殊类型
+    - geo_point & geo_shape / percolator    
+
+节点类型:
+    主节点: 
+          - node.master true
+          - 控制整个集群中的操作、比如创建/删除一个索引、跟踪集群中的节点、分配分片到节点。
+          - 主节点处理集群的状态并广播到其他节点、并接收其他节点的确认响应
+    数据节点: 
+          - node.data true
+          - 持有数据和倒排索引
+    客户端节点: 
+          - 扮演一个负载均衡的角色、将到来的请求路由到集群的各个节点
+          - 将node.master属性和node.data属性都设置为false、那么该节点就是一个客户端节点
+    协调节点:
+          - elasticsearch集群中作为客户端接入的节点叫协调节点
+          - 负责接收Client的请求、将请求分发到合适的节点、最终把结果汇集到一起 
+    eligible节点:
+          - 默认每个节点都是eligible节点、可以参加选主流程、成为Master节点                   
+倒排索引:
+        对文档中的词项进行分词、并创建去重词项的有序列表、将词项与其在文档中出现的位置列表关联、便形成了倒排索引。
+
+        - 单词到文档ID的关系
+
+  - 单词词典: 记录所有文档的单词、记录单词到倒排列表的关联关系(单词比较大、可以通过B+树和哈希拉链法实习)
+
+  - 倒排列表: 记录了单词对应的文档结合、由倒排索引项组成:
+    - 文档ID
+    - 词频TF-该单词在文档中出现的次数、用于相关性评分
+    - 位置(Position) 单词在文档中分词的位置。用于语句搜索(phrase query)
+    - 偏移(Offset) 记录单词的开始结束位置、实现高亮显示
+
+正排索引:
+        - 文档ID到文档内容和单词的关联        
+
+Analysis - 文本分析是把全文转换一系列单词(term/token)的过程、也叫分词
+
+
+
+查询节点:
+    1.协调节点创建一个长度为from+siez的空优先级队列
+    2.然后转发这个请求到索引中每个分片的原本或者副本。每个分片在本地执行这个查询并且将结果到一个大小为from+size的有序本地优先队列里去。
+    3.每个分片返回document的id和它优先队列里的所有document的排序值给协调节点。协调节点把这些值合并到自己的优先队列里产生全局排序结果。
+    协调节点发送查询请求、先分组排序、在归并到一起。
+优先队列:
+    一个优先队列只是一个存有前n个(top-n)匹配document的有序列表。这个优先队列的大小由分页参数from和size决定
+
+./bin/plugin -install lukas-vlcek/bigdesk   bigdesk是集群监控插件、通过该插件可以查看整个集群的资源消耗情况、cpu、内存、http连接等等。
+安装完成之后在浏览器输入：http://ip:9200/_plugin/bigdesk/
+
+
+./bin/plugin -install mobz/elasticsearch-head  通过head、可以查看集群几乎所有信息、还能进行简单的搜索查询、观察自动恢复的情况等等。
+安装完成之后在浏览器输入：http://ip:9200/_plugin/head/
+
+
+
+参考文献：http://my.oschina.net/xiaohui249/blog/228748
+插件大全：http://www.searchtech.pro/elasticsearch-plugins
+
+集群配置：
+cluster.name: test_index  集群名称
+node.name: "es01"         节点名称&
+path.data: /data/elasticsearch/data   数据目录
+path.work: /data/elasticsearch/work   工作目录
+
+
+
+path.logs: /data/elasticsearch/log    日志目录
+path.plugins: /data/elasticsearch/plugins  插件目录
+network.host: 192.168.1.1          监听地址
+index.analysis.analyzer.ik.type : "ik"  配置加载ik中文插件
+
+
+启动命令：
+          /usr/local/elasticsearch/bin/elasticsearch & 后台启动
+
+查看所有索引:
+          GET _cat/indices          
+
+创建索引：
+          curl -XPUT '192.168.1.1:9200/test'          
+删除索引：
+          curl -XDELETE '192.168.1.1:9200/test'   
+          curl -XDELETE 'http://localhost:9200/logstash-2015.09.*' 删除索引端口号后面跟索引的名称
+
+          DELETE /_all 删除所有索引
+
+查看索引:
+          curl GET http://localhost:9200/logstash-2015.09.07
+
+查看节点信息：
+          curl http://localhost:9200/_nodes/process?pretty
+
+
+查看:  
+  _nodes/{node}/hot_threads  当前执行的线程、看那个线程占用cpu比较高、如果是 elasticsearch[{node}][search][T#10] 则是查询导致的，如果是 elasticsearch[{node}][bulk][T#1] 则是数据写入导致的。
+
+
+
+测试索引(同时测试中文插件)：
+          curl 'http://localhost:9200/test/_analyze?analyzer=ik&pretty=true' -d' {"text":"去北京怎么走"}'  
+
+
+http://192.168.1.1:9200/test/_analyze?analyzer=ik_smart&pretty=true&text=%E9%9D%A2%E8%86%9C 网页分词
+
+
+curl -XGET 'http://localhost:9200/test/item/_search?pretty' -d '
+    {
+        "query" : {
+            "match" : { "_all" : "丝塔芙" }
+        }
+    }'
+
+
+集群状态:   /_cluster/health 
+green
+所有的主分片和副本分片都正常运行。
+yellow
+所有的主分片都正常运行，但不是所有的副本分片都正常运行。
+red
+有主分片没能正常运行。
+
+
+
+
+什么时候选举:
+  1、候选主节点的当前状态不是主节点
+  2、候选主节点使用ZenDiscovery的ping操作查询集群中的其他已知节点、并确认没有节点连接到主节点
+  3、当有多个minimum_master_nodes节点未连接到主节点
+
+集群选举条件:
+  - clusterStateVersion越大、优先级越高。保证新的master拥有最新的clusterstate(即集群的meta)
+  - 当clusterStateVersion相同时、节点的ID越小、优先级越高。节点ID第一次启动时生成的一个随机字符串。
+
+错误检测:
+- master定期检测集群内的其他node、另一类是集群内部其他的node定期检测当前集群的master
+- 检查方法就是定期执行ping请求
+
+
+
+
+
+
+
+curl -XPUT 'http://localhost:9200/_all/_settings?preserve_existing=true' -d '{
+  "index.max_rescore_window" : "20000"
+}'
+
+
+
+
+
+http://rhelblog.redhat.com/2015/07/29/architecting-containers-part-1-user-space-vs-kernel-space/
+
+
+应该至少3个节点、将mimimum_master_nodes设置为2、这样、如果一个节点断开那么不会形成自己的集群、但会尝试重新加入其它2个节点。
+2个节点、如果节点无法与彼此通信、每个节点认为其它已经消失、然后形成自己的集群、这些节点将永远不会重新连接。
+
+
+2. 还有两个直观的参数可以减缓脑裂问题的出现：
+
+discovery.zen.ping_timeout（默认值是3秒）：默认情况下，一个节点会认为，如果master节点在3秒之内没有应答，那么这个节点就是死掉了，而增加这个值，会增加节点等待响应的时间，从一定程度上会减少误判。
+
+discovery.zen.minimum_master_nodes（默认是1）：这个参数控制的是，一个节点需要看到的具有master节点资格的最小数量，然后才能在集群中做操作。官方的推荐值是(N/2)+1，其中N是具有master资格的节点的数量（我们的情况是3，因此这个参数设置为2，但对于只有2个节点的情况，设置为2就有些问题了，一个节点DOWN掉后，你肯定连不上2台服务器了，这点需要注意）
+
+discovery.zen.fd.ping_interval 1s 指定节点多久向目标节点发送一次ping请求
+discovery.zen.fd.ping_timeout 30s 指定了节点等待ping请求的回复时间。
+discovery.zen.fd.ping_retries 3 重试次数
+
+集群重启时恢复时的考虑:
+    默认情况每当一个节点重启时、主节点会认为每个节点加入集群时、需要在节点间开始均衡数据
+
+gateway
+  - 模块用于存储es集群的元数据信息、如索引设置、分片数据、集群的状态。集群元数据的没一次改变(如增加删除索引等)、这些信息都要通过gateway模块进行持久化。
+
+  gateway.expected_nodes 预期的节点数(默认为0)、一旦满足、就开始恢复。忽略*_after_time参数
+  gateway.recover_after_time  如果未达到预期的节点数、则恢复过程将等待配置的时间量、然后再尝试恢复。
+一旦超时、满足以下条件、恢复就会开始:
+    gateway.recover_after_nodes 只要节点加入数量达到、即可恢复
+    gateway.recover_after_master_nodes 只要这么多主节点加入集群、就可以恢复
+    gateway.recover_after_data_nodes 只要这么多数据节点已加入集群、就可恢复
+
+
+    gateway.expected_nodes: 10
+    gateway.recover_after_time: 5m 等待5分钟、或者10节点上线后、才能进行数据恢复、这取决于那个条件先达到
+
+(如: 集群有10节点、假设有5个节点出问题、剩余的节点选举一个master、从而形成一个集群。他们注意到数据不再均匀分布、因为有5个节点丢失了、所以他们之间会立即启动分片复制。当另外5个节点加入集群中、这时候集群的大小从5变成了10、在这个过程中、数据被来回移动。而上面的参数就是告诉集群、当我的在线节点达到数量之后、在进行数据恢复)
+
+
+
+优化设置:
+    bootstrap.memory_lock = true 锁定物理内存(需要在limits.conf里设置 xx - memlock unlimited)
+    禁用交换文件
+    vm.max
+
+seccomp:
+    是一种Linux kernel中的安全机制、正常情况下、程序可以使用所用的syscall、这是不安全的、比如劫持程序流后通过execve的syscall来getshell、通过seccomp我们可以在程序中禁用掉某些syscall。
+
+_nodes?filter_path=**.mlockall 查看设置是否成功
+_nodes/stats/process?filter_path=**.max_file_descriptors 查看文件描述符
+
+
+
+安装前的调整:
+    bootstrap.system_call_filter: false  系统调用过滤器 seccomp
+    vm.max_map_count = 262144  mmap内存映射数
+    nofile 打开文件数要设置65536
+    noproc 打开进程数至少是2048 es的创建线程数
+
+
+集群中的状态: _cluster/health?pretty
+    green  集群正常状态、所有分片都正常
+    yellow 所有主分片正常、副分片缺失。集群可以正常运行、但又一定风险、因为没有副本。
+    red  有主分片以及它的全部副本都缺失。缺少数据意味着:搜索只能返回部分数据、而分配到这个分片上的写入请求会返回一个异常。
+
+  _cluster/health?level=indices  列出每个索引的分片的详细详细
+
+
+Bulk API:
+  - 支持在一次API调用中、对不同的索引进行操作。也就是说减少网络开销、通过一次rest请求、进行对索引的多次操作。
+  - 操作中单条操作失败、不影响其他操作
+  - 返回结果中包括了每一条操作执行的结果
+  - 支持四种操作:
+    - index
+    - create
+    - update
+    - delete
+
+mget 批量读取。批量操作、可以减少网络连接所产生的开销、提高性能。
+msearch 批量查询
+
+
+- PUT 是指定id存在的时候、会修改索引、如果指定索引不存在会添加索引。
+- CREATE 就是创建、如果发现文档ID已经存在、那么创建就会失败。
+- Index原则是删除再创建、如果发现文档id已经存在、删除原来的文档信息、然后在创建现在的文档。版本+1
+- Update 文档必须已经存在、更新只会对相应字段做增量修改
+
+create
+
+自增ID和自定义ID的影响:
+- es的自增id会使用es自己的hash函数、确保id被均匀分配到不同的分片的。自增id一般不会有什么问题。但是如果指定了routing参数、有可能会引起分配不均匀的情况发生。
+
+
+
+ES的搜索机制:
+  分为两阶段进行:
+    - 第一阶段 - Query
+    - 第二阶段 - Fetch
+
+集群的配置文件修改的方式:
+  - 静态修改、通过修改es的配置文件完成
+  - 命令行、启动时、指定参数
+  - 动态设置:
+        - Transient 在集群重启后会丢失
+        - Persistent 在集群中重启不会丢失
+
+提升写入性能:
+  客户端:
+    - 多线程
+    - 批量写
+
+  服务端:
+    - 使用更好的硬件
+    - 降低IO操作 
+    - 降低CPU和存储开销: 减少不必要分词/避免不要的doc_values/文档的字段尽量保证相同的顺序、可以提高文档的压缩率
+    - 尽可能做到写入分片的均衡负载、实现水平扩展
+
+
+优化参数:
+  index.refresh_interval     设置多久
+  indices.memory.index_buffer_size  缓冲

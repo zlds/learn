@@ -1,0 +1,420 @@
+SSL (Secure Sockets Layer 安全套接字层) 
+  - 协议最初是有网景公司用来保障网上交易安全而开发的。该协议通过加密来保护客户个人资料、通过认证和完整性检查来确保交易安全。
+
+TLS 传输层安全协议
+
+CA 证书颁发机构
+  - 是第三方机构、客户端和服务端都信任的机构
+  - 主要是解决身份验证的
+
+TLS 解决
+  数据机密性:
+      通过对称加密对原始数据进行加密
+  不可否认: 
+      说的身份验证、通过数字证书解决
+  完整性:
+      服务端会对数据进行hash、得到定长摘要、然后用私钥对摘要进行加密、作为数字签名、最后将数字签名一同发给客户端
+
+
+主流对称算法会将原始明文分成等长的多组明文、再分别用密钥生产密文、最后把它们拼接在一起形成最终密文。
+
+
+对称加密:
+      DES
+	    3DES
+	    AES
+	    Blowflsh
+	    Twoflsh
+	    IDEA
+	    RC6
+	    CAST5
+    特点:
+        1、加密、解密使用同一个密钥
+        2、将原始数据分割成固定大小的块、逐个进行加密;
+    缺陷:
+        1、密钥过多、服务器要为每个用户生成一个密钥、密钥分发困难。
+        2、在非安全的网络传输、密钥容易泄露。
+
+    两种模式: 流式加密和分组加密
+        流式加密: 
+            - 常用的RC4(已经不再安全)、ChaCha20(google推出)
+            - 每次加密数据流的一位(bit)或者一个字节(byte)
+        分组加密:
+            - AES-CBC、AES-GCM  DES  3DES
+            - 通常也成为块加密、是将明文进行分组、加密算法对每个分组分别加密。典型的分组大小是64bit
+                或128bit、192bit、256bit。
+
+非对称加密:
+       RSA
+	   DSA
+	   ELGamal
+       DH
+       ECC
+     公钥: 从私钥中提取产生可公开所有人pubkey
+     私钥: 通过工具创建、使用者自己留存、必须保证其私密性;secret key;
+ 用途:
+        密钥交换: 发送方用对方公钥加密一个对称密钥、并发给对方;
+        数字签名: 主要在于让接收方确认发送方的身份;
+        数据加密: 使用公钥或者私钥对数据进行加密(性能比较低)
+
+特征码：列如每个文件的MD5运算后得出的数值。用这个数值对比官方公布的数值进行比对、确认是否被别人修改过。
+
+
+对称加密: 主要是保证数据信息不被泄露
+
+
+    1          2         3
+ECDHE-RSA  -AES256  -GCM-SHA384
+
+第一部分是密钥交换、这部分会使用非对称加密算法来生成会话密钥。
+第二部分是对称加密算法、主要是对传输的数据进行加密传输用的
+第三部分是会话校验算法、为了防止握手本身被串改
+
+
+前向保密 (让证书私钥和会话密钥无关、保证安全性、在服务器上配置)
+  - 传统的HTTPS下、客户端生成一个预主密钥、然后使用服务器的公钥进行加密、然后发给服务器。如果拥有了服务器的私钥、就可以解密会话密钥。而前向加密、客户端和服务端会随机生成会话密钥、不在通过网络发送该密钥
+  - 参考:https://blog.twitter.com/engineering/en_us/a/2013/forward-secrecy-at-twitter.html
+
+信息摘要: 主要是对信息的完整性和一致性校验。
+    摘要: 
+        - 一段信息、经过摘要算法得到一串哈希值、就是摘要
+        - 信息可以是任意长度、而摘要是定长
+
+        算法:
+            MD5 SHA1 SHA256 SHA512
+
+数字签名:
+    摘要经过加密(私钥加密)、就得到数字签名
+
+数字证书包含内容:
+    - 证书颁发机构
+    - 证书的有效期、版本
+    - 证书颁发机构签名
+    - 签名使用的加密算法 
+    - 公钥
+
+NPN:
+    是一个TLS扩展、由google在开发SPDY协议时提出。
+    NPN是服务端发送所支持的http协议列表、由客户端选择。
+ALPN:
+    是客户端发送所支持的http协议列表、由服务端选择    
+
+
+TLS 版本
+  - TLS1.2 需要两次往返来完成握手 也就是说需要2个RTT
+
+  TLS1.3 
+    - 仅需要一次往返。 仅需要往返一次即可建立连接。3RTT+DNS 
+    - 删除了淘汰的不安全算法如: SHA-1 RC4 DES 3DES AES-CBC MD5
+
+
+
+推荐协议版本:
+  - TLS1.2 TLS1.3
+  - SSL3 TLS1.0 不安全
+
+
+
+HTTP和HTTPS唯一区别是HTTPS使用TLS加密来完成http请求和响应
+
+使用HTTPS 
+  - 注意HTTPS证书过期时间
+
+
+
+
+SSL会话主要三步：
+ 第一阶段：ClientHello
+    支持的协议版本、如TLS 1.2
+    支持的加密算法、如AES、DES、RSA
+    客户端生成一个随机数、稍后用户生成"会话密钥"
+    支持的压缩算法
+  第二阶段：ServerHello
+     确认使用的协议的版本、如TLS 1.2
+     确认使用的加密方法
+     服务端生成一个随机数、稍后用户生成"会话密钥"
+     服务器证书
+  第三阶段：
+     验证服务器证书、在确认无误后取出其公钥、(发证机构、证书完整性、证书持有者、证书有效期、吊销列表)
+     发送以下信息给服务端：一个随机数、编码变更通知、客户端握手结束通知
+
+
+  
+  Client_hello 客户端发起请求、支持协议版本、加密套件、随机数、扩展字段
+  
+  Server_hello 确定协议版本、加密套件、随机数、
+  Server_certificates 服务端证书
+  
+  Client_key_exchange 合法性验证通过之后、客户端计算产生Pre-master、并用证书公钥加密、发送给服务端
+  Change_chiphe_spec 客户端通知服务器后续通信都采用协商的通信秘钥和加密算法进行加密通信
+  Encrypted Handshake Message 结合之前所有通信参数的hash值与其它相关信息生成一段数据、采用协商秘钥
+session secret加密算法进行加密、然后发送给服务器用于数据与握手验证
+
+  Change Cipher Spec: 表示随后的信息都将用双方商定的加密方法和秘钥发送
+  Server_hello_done 告知客户端server_hello 信息发送结束
+
+
+DV：支持单域名、多域名。泛域名和多个泛域名不支持
+OV：支持单域名、多域名、泛域名、多个泛域名
+EV：支持单域名、多域名。泛域名和多个泛域名不支持
+
+
+
+完全握手:
+  - 性能下降普通HTTP性能的10%以下
+RSA 算法消耗整体性能的75%左右
+
+优化: 
+  - Session Cache
+  - Session Tick
+  - OSCP
+  - False start 在client_key_exchange 发出时将应用层数据一起发出来、能够节省一个RTT。False start依赖于PFS、PFS依赖于DHE密钥交换系列算法(ECDHE_RSA DHE_DSS ECDHE_ECDSA)
+
+    - Session Cache 就是将第一次握手计算出来的密钥存起来、后续的请求中直接使用.这样可以节省证书传送等开销、也可以将tls握手所需要RTT减少到一个。 
+
+    - Session Identifier (会话标识符): 是TLS握手中生成的session ID。服务端可以将session id协商后的信息保存起来、浏览器也可以保存seession id、并后续的Client Hello握手中带上它、如果服务端能找到与之匹配的信息、就可以完成一次快速握手  
+
+简化握手: 
+        减少一个RTT
+        减少CPU计算
+
+协议层面实现简化握手:
+    session tick 在客户端缓存
+
+      会话票证不是标识符，而是服务器加密的会话数据(只有服务器可以解密)
+
+        - 不需要在内存中存放session信息、而是基于一个独有密码、这个密码会在每台服务器共享。
+        - 基于这个密码对相关的session信息进行加密、然后发给客户端、当客户端下一次需要握手时、会基于这个密码进行解密、解密之后就会得到上次加密的密钥。然后就完成握手。
+       
+      - 服务端利用自己的ticket key加密对称密钥给客户端、客户端下次请求时把ticket给服务端、服务端利用ticket key解密得到对称加密密钥。  
+
+
+        session cache 缺点: 
+            - 服务端必须要做缓存、会浪费很大的内存。
+            - session cache 不共享、导致重新握手。如第一次访问server-A 而第二次访问server-B。
+        
+
+
+会话标识符：Session Identifier 是在ssl 2.0中引入的、支持服务器创建32字节的会话标识符、放在ServerHello中、在内部、服务器会为每个客户端保存一个会话ID和协商的会话参数。相应的客户端也可以保存会话ID信息、并将该ID包含在后续会话的"ClinetHello"消息中、从而告诉服务器自己还记着上次握手协商的加密套件和密钥。然后可以重用上次的会话。
+会话记录单:Session Ticket 
+    - 不用服务器保存每个客户端的会话状态。 所有的会话数据只保存在客户端
+    - 在服务器完整TLS握手的最后一次交换中添加一条"新会话记录单"(New Session Ticket)记录、包含只有服务器知道的安全密钥加密过的所有会话数据。然后客户端将这个会话记录单保存起来、在后续会话的ClientHello消息中、可以将其包含在SessionTicket扩展中。
+
+- haproxy中可以通过 tune.ssl.lifetime 设置过期时间、默认为300秒(5分钟)
+- nginx 可以通过 ssl_session_timeout 默认5分钟; 
+
+
+CRL(Cerificate revocation list) 证书撤销名单:
+  - 一种检查所有证书状态的简单机制: 每个证书颁发机构维护并定期发布已撤销证书的序列号名单
+  - 浏览器检测证书是否被吊销、就是使用CRL的方式、CRL需要浏览器去指定的位置下载吊销列表。
+    缺点:
+        1、有可能文件会很大、浪费网络开销
+        2、具有一定的滞后性、新吊销的证书只有等CRL文件更新后才能检测出吊销情况
+
+OCSP(Online Certificate Status Protocol) 在线证书状态协议
+  - 一种实时检查证书状态的机制。
+  - 是TLS证书状态查询扩展
+  - 浏览器直接去CA的OCSP服务器对证书的吊销情况做验证
+  - OCSP 响应本身经过了数字签名、无法伪造。
+
+OCSP 缺点:
+  - 客户端查询OCSP请求时、会阻塞请求
+    - 它增加了每次握手的流量大小。
+    OCSP 仅针对当前站点证书、并且从不检查证书链中的中间CA证书的有效性、并且客户端必须使用CRL或OCSP响应单独检查证书的有效性
+
+OCSP
+在https通信过程时、浏览器会去验证服务端下发的证书链是否已经撤销、验证方法有两种：
+    CRL是证书撤销列表、CA机构会维护并定期更新CRL列表、但这个机制存在不足:
+        1.CRL列表只会越来越大
+        2.如果浏览器更新不及时、会造成误判。
+
+OCSP是实时证书在线验证协议、只是对CRL机制的弥补、通过OCSP浏览器可以实时的向CA机构验证证书、
+    1、对CA机构要求过高。
+    2、客户端的访问隐私会在CA机构被泄露。
+    3、增加浏览器的握手延迟。
+
+OCSP Stapling:
+     是指服务端在证书链中包含颁发机构对证书的OCSP查询结果、从而让浏览器跳过自己去验证的过程。
+ Stapling是对OCSP缺陷的弥补、服务器可事先模拟浏览器对证书进行验证、并将带有CA机构签名的OCSP响应保存到本地、然后握手阶段、将OCSP响应和证书一起下发给浏览器、省去浏览器的在线验证过程。
+
+ OCSP Stapling 由Server获取证书吊销状况、同时还可以将OCSP信息缓存起来。
+               OCSP响应也是具备CA RSA私钥签名的、使所以不用担心伪造问题。
+
+openssl s_client -connect login.lizi.com:443 -status -tlsextdebug < /dev/null 2>&1 | grep -i "OCSP response"
+如果结果是下面这样，说明 OCSP Stapling 已开启：
+OCSP response:
+OCSP Response Data:
+    OCSP Response Status: successful (0x0)
+    Response Type: Basic OCSP Response
+而这样显然是未开启：
+OCSP response: no response sent
+
+
+openssl s_client -connect xxx.xxx.com:443 查看ssl握手
+openssl ciphers -v 查看支持密钥套件、握手期间根据优先级
+
+
+openssl speed  aes-256-cbc
+openssl speed  -evp aes-256-cbc
+
+
+
+
+
+查看cpu是否支持硬件ssl(aes)加速
+grep -m1 -o aes /proc/cpuinfo
+egrep aes /proc/cpuinfo
+lsmod |grep aes 查看内核是否加载了aes模块
+如果没有加载：modprobe aesni_intel
+
+modprobe aesni_intel
+FATAL: Error inserting aesni_intel (/lib/modules/3.5.0/kernel/arch/x86/crypto/aesni-intel.ko): No such device
+（这种情况是硬件不支持AES-NI或者在BIOS中被disable了）。
+
+ modprobe aesni_intel
+FATAL: Module aesni_intel not found.     （这种情况是module没有编译）
+
+
+
+Client Hello 随机数、支持的协议版本及加密套件
+Server Hello 确定协议的版本、加密算法、及生成一个随机数
+Certificate 服务器证书
+ServerKeyExchange 指定使用那种密钥协商协议、密钥协商时客户端需要的信息
+ServerHelloDone 告知客户端服务器这边握手相关的消息发送完毕
+
+Client Key Exchange 客户端生成PreMaster Key、利用服务端证书中的公钥加密、并通过Client Key Exchange消息发给SSL服务器
+
+Change Cipher Spec消息、通知服务器后续报文将采用协商好的密钥和加密套件进行加密和MAC计算、
+
+Server Hello Done 表明服务器已将所有预计的握手消息发送完毕
+Encrypted Handshake Message(Finished) 握手已将完成
+
+
+
+TLS 1.3
+
+    将握手时间从2-RTT降低到1-RTT，并且增加0-RTT模式。删除RSA秘钥协商方式，只支持ECDH的秘钥协商顺丰。
+
+
+
+    客户端hello: 协议版本，密码套件，客户端随机数。还包括用于计算预主秘钥的参数.
+
+    服务器生成秘钥: 服务器接收到客户端密码套件，客户端参数，随机数。服务器创建主秘钥。
+
+    服务器完成: 服务器证书，数字签名，服务器随机数和选择的密码套件。
+
+
+ORTT
+    client hello包含Session Ticket和HTTP GET请求，服务端验证通过之后返回数据。客户端还会发送一个共享秘钥，以便客户端和服务器
+
+
+
+SNI(Server Name Indication,服务器名称指示):
+    - TLS扩展、允许客户端在握手之初就指明要连接的主机名。web服务器可用检查SNI主机名、选择适当的证书、继续完成握手。
+    - 相同的ip地址服务与不同的域名、而区分不同的域名的手段就是sni
+
+
+HSTS  HTTP严格传输安全。
+  - 是一种安全策略机制、它能让服务器通过简单的HTTP首部(strict-transport-security: max-age=31536000)让浏览器记住通过https访问。
+
+  - SSLTrip
+    - SSL剥离攻击是中间人攻击的一种。SSL剥离的实施方式是阻止浏览器与服务器创建https连接。
+    - 降级攻击是一种中间人攻击形式、攻击者将web浏览器从正确配置的https web服务器重定向到而已服务器
+
+    - 默认情况下我们访问时是通过: example.com 然后跳转到https、如果中间人劫持了请求、阻止客户端与服务器建立HTTPS连接、重定向到恶意的服务器地址。
+
+
+Nginx 设置SSL:
+  - listen 443 ssl;  开启ssl
+  - ssl_protocols TLSv1.1 TLS1.2;  指定协议版本
+  - ssl_certificate /usr/xxx/cert.pem;  公钥
+  - ssl_certificate_key  /usr/xx/cert.key 私钥
+  - ssl_session_timeout 5m  seession id session tick 过期时间
+  - ssl_session_ticket_key file; 设置用于加密和解密TLS会话票证的密钥。
+  - openssl rand 80> ticket.key
+  - ssl_session_tickets 开启tickets
+  - ssl_session_cache off |none 缓存大小 设置session cache
+
+
+
+TLS 1.3
+	ClientHello，不仅包含支持的加密套件，还会猜测服务器可能会选择的加密算法，并以此计算发送共享秘钥
+	ServerHello  选择合适的加密套件，包含共享秘钥，证书。而这些数据，这时候已经是加密的
+        
+        3.客户端收到服务器的共享秘钥后，计算出秘钥，加密连接开始发送数据.
+
+	0-RTT
+		可以直接在ClientHello阶段发送加密的数据。(这种方式不具备前向安全，可能会有重放攻击，使用该功能需谨慎)
+
+
+
+
+(1).client_hello
+
+  客户端发起请求，以明文传输请求信息，包含版本信息，加密套件候选列表，压缩算法候选列表，随机数，扩展字段等信息，相关信息如下：
+
+  支持的最高TSL协议版本version，从低到高依次 SSLv2 SSLv3 TLSv1 TLSv1.1 TLSv1.2，当前基本不再使用低于 TLSv1 的版本;
+
+  客户端支持的加密套件 cipher suites 列表， 每个加密套件对应前面 TLS 原理中的四个功能的组合：认证算法 Au (身份验证)、密钥交换算法 KeyExchange(密钥协商)、对称加密算法 Enc (信息加密)和信息摘要 Mac(完整性校验);
+
+  支持的压缩算法 compression methods 列表，用于后续的信息压缩传输;
+
+  随机数 random_C，用于后续的密钥的生成;
+
+  扩展字段 extensions，支持协议与算法的相关参数以及其它辅助信息等，常见的 SNI 就属于扩展字段，后续单独讨论该字段作用。
+
+(2).server_hello + server_certificate + sever_hello_done
+
+  (a) server_hello, 服务端返回协商的信息结果，包括选择使用的协议版本 version，选择的加密套件 cipher suite，选择的压缩算法 compression method、随机数 random_S 等，其中随机数用于后续的密钥协商;
+
+  (b)server_certificates, 服务器端配置对应的证书链，用于身份验证与密钥交换;
+
+  (c) server_hello_done，通知客户端 server_hello 信息发送结束;
+
+(3).证书校验
+
+  客户端验证证书的合法性，如果验证通过才会进行后续通信，否则根据错误情况不同做出提示和操作，合法性验证包括如下：
+
+  证书链的可信性 trusted certificate path，方法如前文所述;
+
+  证书是否吊销 revocation，有两类方式离线 CRL 与在线 OCSP，不同的客户端行为会不同;
+
+  有效期 expiry date，证书是否在有效时间范围;
+
+  域名 domain，核查证书域名是否与当前的访问域名匹配，匹配规则后续分析;
+
+(4).client_key_exchange + change_cipher_spec + encrypted_handshake_message
+
+  (a) client_key_exchange，合法性验证通过之后，客户端计算产生随机数字 Pre-master，并用证书公钥加密，发送给服务器;
+
+  (b) 此时客户端已经获取全部的计算协商密钥需要的信息：两个明文随机数 random_C 和 random_S 与自己计算产生的 Pre-master，计算得到协商密钥;
+
+  enc_key=Fuc(random_C, random_S, Pre-Master)
+
+  (c) change_cipher_spec，客户端通知服务器后续的通信都采用协商的通信密钥和加密算法进行加密通信;
+
+  (d) encrypted_handshake_message，结合之前所有通信参数的hash值与其它相关信息生成一段数据，采用协商密钥 session secret 与算法进行加密，然后发送给服务器用于数据与握手验证;
+
+(5).change_cipher_spec+encrypted_handshake_message
+
+  (a) 服务器用私钥解密加密的 Pre-master 数据，基于之前交换的两个明文随机数 random_C 和 random_S，计算得到协商密钥:enc_key=Fuc(random_C, random_S, Pre-Master);
+
+  (b) 计算之前所有接收信息的 hash 值，然后解密客户端发送的 encrypted_handshake_message，验证数据和密钥正确性;
+
+  (c) change_cipher_spec, 验证通过之后，服务器同样发送 change_cipher_spec 以告知客户端后续的通信都采用协商的密钥与算法进行加密通信;
+
+  (d) encrypted_handshake_message, 服务器也结合所有当前的通信参数信息生成一段数据并采用协商密钥 session secret 与算法加密并发送到客户端;
+
+(6).握手结束
+
+  客户端计算所有接收信息的 hash 值，并采用协商密钥解密 encrypted_handshake_message，验证服务器发送的数据和密钥，验证通过则握手完成;
+
+(7).加密通信
+  开始使用协商密钥与算法进行加密通信。
+
+
+http://chimera.labs.oreilly.com/books/1230000000545/ch04.html
+
+https://mozilla.github.io/server-side-tls/ssl-config-generator/ TLS配置
+http://www.pianyissl.com/support/page/43 抓包
+

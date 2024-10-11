@@ -1,0 +1,79 @@
+Rabbitmq组件：
+	- Exchange、又称交换器、它接受信息和路由信息、然后将消息发送给消息队列。生产者是将消息发送给exchange、然后exchange路由到一个或者多个queue。
+	- Queue 队列、作用是保存消息。
+	- Binding 是将exchange和queue绑定到一起
+	- Channel 通道、MQ与外部打交道都是通过channel来的、发布消息、订阅队列还是接收消息、都是通过channel。
+	- Virtual Host: 表示一批交换器、消息队列和相关对象。
+RabbitMQ是一个有Erlang开发的AMQP的消息中间件
+
+Exchange Type:
+	- fanout 它会把所有发送到该Exchange的消息路由到所有与它绑定的Queue中
+	- direct 它会把消息路由到那些binding key与routing key完全匹配的Queue中
+	- topic 与direct匹配的不同、topic这个规则就是模糊匹配。
+	- headers 根据发送的消息内容中的headers属性进行匹配
+
+
+prefetchCount 来限制每次发送给消费者消息的个数。
+
+rabbitmq 三种自动处理网络分区的方式:
+	- ignore
+		- 默认模式、什么都不做
+	- pause-minority
+		在暂停少数模式下、rabbitmq将暂停少数节点。节点确定自己处于少数状态。单个分区中最多的节点继续运行、少数节点将在分区启动后立即暂停、并在分区结束时再次启动。
+	- pause_if_all_down
+		在全部暂停模式下、rabbitmq将自动暂停无法到达任何列出的集群节点。换句话说、所有列出的节点必须关闭。		
+	- autoheal
+		在此模式下、rabbitmq将自动重启不在胜出分区中的所有节点。
+		- 获胜的分区是连接最多的客户端分区
+		- 关注的是可用性
+
+
+网络分区恢复:
+	- 首先选择一个最信任的分区。
+	- 停止其它分区中的所有节点、然后重启他们
+	- 当他们从新加入集群时、他们将从受信任的分区中恢复状态
+	- 最后、还应该重新启动受信任分区中的所有节点以清除警告
+
+
+
+核心配置:
+	- vm_memory_high_watermark 配置内存阀值、建议小于0.5。服务端默认配置是当内存使用达到40%、磁盘空间小于50M、启动内存报警、磁盘报警。报警后服务端触发流控。
+	- hipe_compile 开启Erlang HiPE编译选型(相当于Erlang的jit技术)、能够提供性能20%-50%。
+
+
+
+
+rabbitmqctl set_policy ha-all ".*" '{"ha-mode":"all", "ha-sync-mode": "automatic"}'  设置ha模式、并且设置消息自动同步
+
+rabbitmq-plugins   enable rabbitmq_management 启用http插件
+rabbitmqctl   add_user uadmin U.adM.  添加用户并设置密码
+rabbitmqctl   set_user_tags uadmin administrator 设置用户角色
+rabbitmqctl   set_permissions -p / uadmin ".*" ".*" ".*"  设置访问权限
+
+
+
+
+prod
+rabbitmqctl add_user amqp prod_.NAmpq
+rabbitmqctl set_permissions -p / amqp ".*" ".*" ".*"
+
+rabbitmqctl add_user rmqmg ..mg_.NAmpq
+
+
+
+  
+RABBITMQ_NODE_PORT=5672 RABBITMQ_NODENAME=node1  RABBITMQ_CONFIG_FILE=/usr/local/rabbitmq/etc/rabbitmq/node5672/rabbitmq.config  rabbitmq-server 
+
+
+
+
+ rabbitmq-server -detached
+ rabbitmqctl stop_app
+ rabbitmqctl join_cluster test@05                               # 加入、创建集群
+ rabbitmqctl start_app
+
+
+
+
+参考文献：
+           http://88250.b3log.org/rabbitmq-clustering-ha

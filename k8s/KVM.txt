@@ -1,0 +1,18 @@
+grep -o -E 'svm|vmx'  /proc/cpuinfo  查看CPU是否支持
+
+modprobe
+	kvm_inter,  kvm_mod
+
+
+
+KVM vs  XEN
+KVM不管理CPU、内存、中断、而XEN是需要管理如CPU、内存、中断的.
+
+kvm driver 将底层资源抽象、提供一个接口给上层使用
+	- kvm 本身不做任何模拟。它只是暴露一个/dev/kvm接口、这样用户空间通过这个接口来进行如I/O模拟等。
+
+
+Qemu 
+	- 用来模拟IO、工作在用户空间。
+	- qemu本身就是一个开源的一套完整的全虚拟化解决方案。
+

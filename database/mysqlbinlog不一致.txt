@@ -1,0 +1,37 @@
+mysql> CREATE TABLE `t1` (
+  `id` int(11) NOT NULL,
+  `a` int(11) DEFAULT NULL,
+  `t_modified` timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  PRIMARY KEY (`id`),
+  KEY `a` (`a`),
+  KEY `t_modified`(`t_modified`)
+) ENGINE=InnoDB;
+
+insert into t1 values(1,1,'2018-11-13');
+insert into t1 values(2,2,'2018-11-12');
+insert into t1 values(3,3,'2018-11-11');
+insert into t1 values(4,4,'2018-11-10');
+insert into t1 values(5,5,'2018-11-09');
+
+mysql> delete from t1 /*comment*/  where a>=4 and t_modified<='2018-11-10' limit 1;
+
+在statment格式下、会出现主从不一致
+1、如果delete语句使用的是索引a、那么会根据索引a找到第一个满足条件的行、也就是删除的是a=4这一行
+2、但如果使用的是索引t_modified、那么删除的就是t_modified='2018-11-09'也就是a=5这一行
+
+	由于statement格式下、记录到binlog里是语句原文、因此可能会出现这样一种情况: 在主库上这条sql语句的时候、用的是索引a。而在备库执行这条sql语句的时候、却使用的是索引t_modified
+
+
+
+mysql> insert into t values(10,10, now())  mixed 会将now转换成时间戳
+
+
+innodb_flush_logs_at_trx_commit=2
+sync_binlog=1000
+
+可靠行优先策略:
+	1、判断备库B现在的seconds_behind_master、如果小于某个值(比如5秒)继续下一步、否则持续重试这一步
+	2、把主库A改成只读状态、即把readonly设置为true
+	3、判断备库B的seconds_behind_master的值、直到这个值变成0为止
+	4、把备库B改成可读写状态、也就是把readonly设置为false
+	5、把业务请求切换到备库B

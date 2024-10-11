@@ -1,0 +1,902 @@
+Bean:
+	是一个由Spring IOC容器实例化，组装和管理的对象。
+
+	1.bean是对象
+	2.bean由spring ioc管理
+	3.我们的应用程序由一个个bean构成
+
+	配置方式:
+		1.基于XML文件进行配置
+		2.基于注解进行配置
+		3.基于Java程序进行配置(Spring 3+)
+
+	声明周期:
+		1.实例化bean对象
+		2.初始化
+		3.使用
+		4.销毁
+
+
+注解:
+	传统的spring做法是在使用.xml文件来对bean进行注入或者配置aop，事务。这么做的缺点:
+		1.如果所有的内容都配置在.xml文件中， 那么.xml文件将会十分庞大，不利于维护，可读性差。
+
+	为了解决这个问题，Spring引入了注解，通过@XXX的方式，让注解与Java Bean紧密结合，这样就增加了java bena的可读性与内聚性。
+
+@Autowired
+	将容器中的bean自动的和我们需要这个bean的类组装在一起
+	就是自动装配，其作用是为了消除代码里面的getter/setter与bean属性中的propert。
+
+
+
+
+
+Spring IOC 容器:
+	负责管理对象的生命周期，创建对象，管理对象。	
+
+	对象实例的创建不再由调用者管理，而是由sprin容器创建，spring容器会负责控制程序之间的关系，而不是由代码之间控制。因此，控制权由程序代码交由spring容器，发生了反转，即控制反转。
+
+	IOC容器分类:
+		1.BeanFactory
+			是基础的IOC容器，是一个接口。BeanFactory是一个管理Bean的工厂，他主要负责初始化各种bean，并调用它们的生命周期方法BeanFactory接口实现类。
+
+		2.ApplicationContext
+			是BeanFactory的子接口，也被称为应用上下文，不仅提供了BeanFactory的所有功能，还添加了资源访问，事件传播等方面的支持。
+
+spring Bean
+	通过DI来实现依赖管理。
+
+
+	传统对象与对象直接的关系需要在代码里面new，耦合度高。
+
+	spring容器中的bean通过DI来协调这些对象之间的关系， 这样对象就不要关心，只需要实现自己本身关注点。
+
+
+DI:
+	依赖注入
+	实现对象之间的松耦合关系
+
+
+
+spring bean 装配方案:
+	1.通过xml显式配置
+	2.在java中进行显式配置
+	3.隐式bean发现和自动装配		
+
+
+
+拦截器:
+	实现AOP处理方式，通过java反射在方法调用前或调用后进行处理。
+
+
+	preHandle该方法将在请求处理之前进行调用。
+	postHandle 该方法进行处理
+	after
+		该方法将在整个请求结束之后，
+
+
+
+
+AOP:
+	1.定义一个切面类Aspect
+	2.定义切点Pointcut
+	3.定义Advice通知
+
+
+
+
+	@Pointcut 用来定义一个切面
+		表达方式:
+			execution() 拦截xxx包和子包下面的所有方法
+			annotation() 针对某个注解来定义切面，比如我们对具有@PostMapping注解的方法做切面
+
+拦截器:
+	登录验证、权限校验，后端埋点统计PV/UV，日志处理，记录请求操场日志.
+
+
+拦截器和过滤器区别:
+	1.拦截器是基于java的反射机制，过滤器是基于函数回调
+	2.拦截器不依赖servlet容器，过滤器依赖servlet容器
+	3.拦截器只能对action请求起作用，而过滤器则可以对几乎所有请求起作用
+	4.拦截器可以访问action上下文，栈里的对象，而过滤器不能访问。
+
+
+
+
+
+
+
+ApplicationContext 容器:
+	加载配置文件中定义的bean。
+	是BeanFactory的子接口，也被称为spring上下文
+
+	FileSystemXmlApplicationContext:
+		从xml文件中加载已定义的bean。需要提供完整的xml文件路径
+	ClassPathXmlApplicationContext:
+		从xml文件中加载定义的bean。不需要提供xml文件的完整路径，只需要配置classPath环境变量即可.
+	WebXmlApplicationContext:
+		会在一个web应用程序的范围加载xml文件中已被定义的bean。
+
+Bean:
+	是一个被实例化，组装，并通过Sping IOC容器所管理的对象。这些bean是由容器提供的配置原数据创建的。
+
+	配置信息:	
+		1.xml
+		2.java类 @Configuration
+		3.注解 @Autowired
+
+	流程:
+		1.读取bean配置信息
+		2.根据bean注册表实例化bean
+		3.将bean实例放到spring容器中
+		4.使用bean
+
+	作用域:
+		singleton 在spring ioc容器仅存在一个bean实例 单列方式。
+		prototype 每次从容器中调用bean时，都返回一个新的实例。
+		request 每次http请求都会创建一个新的bean，该作用域仅适用于WebApplicationContext环境
+		session 同一个http session共享一个bean，不同session适用不同的bean。
+		globalsession 一般用于protlet应用环境，改作用域仅适用于webapplicationcontext环境
+
+	bean生命周期
+		Bean的定义Bean的初始化Bean的使用Bean的销毁	
+
+		initmethod  初始化方法。会先执行
+		destroymethod 销毁方法
+
+
+@SpringBootApplication
+	该注解类就是整个程序的入口，一方面会启动整个整个spring容器，另一个方面会自动扫描代码包结构下的@Component @Service @Repository @Controller等注解并把这些注解对应的类转化为Bean对象全部加载到Spring容器中
+
+
+applecation.yml和bootstrap.yml区别
+	bootstrap是系统级别的配置文件。
+	application是应用级别的配置文件
+
+
+配置文件:
+	Spring Boot分别使用label和profile概念来指定配置信息的版本以及运行环境
+
+	label表示配置版本控制信息
+	profile用来指定该配置文件所对应的环境
+
+
+
+spring boot常用注解
+	@RestController注解是传统的spring MVC中所提供的@Controller注解的升级版，相当于@Controller和@ResponseEntity注解的结合体，会自动使用JSON实现序列化/反序列化操作。
+	@RequestMapping用于指定请求地址的映射关系
+	@GetMapping的作用等同于指定了GET请求的
+
+
+
+
+	条件注解:
+		@Conditional
+	类条件:
+		@ConditionalOnClass
+		@ConditionalOnMissingClass
+	属性条件:
+		@ConditionalOnProperty
+					
+
+
+pom文件:
+	groupId:
+		项目组织的唯一标识。
+	artifactId	
+		项目的通用名称
+	version
+		项目的版本
+	packaging
+		打包机制，			
+
+
+
+MVC:
+	view
+		视图层: 不关心后台业务逻辑，只关心怎么向用户展示。
+
+
+PO:
+	可以理解一个PO就是数据库中的一条记录。可以把一条记录作为一个对象处理，可以方便的转为其它对象，或者json输出。
+	PO中不应该包含对数据库的操作。
+
+DAO
+	 封装对数据库的访问。此对象用于访问数据库，通常和PO结合使用，dao中包含了数据库的操作方法。
+	 完成数据持久化的相关工作。
+
+	1.根据需求确定DAO层的基本能力
+	2.针对每个domain类提供最基础的CURD操作
+	3.之后在DAO层之上的Service层，就可以直接使用DAO层的接口，而无须关心底层使用的是数据库还是其他存储，也无须关心读写数据使用的是SQL语句还是其他查询的语句，这就能够实现业务逻辑和存储的解耦。
+
+BO
+	主要作用是把业务逻辑封装为一个对象。会参与业务逻辑的处理操作，里面可能包含多个类，用于表示一个业务对象。
+
+DTO
+	主要用于远程调用等需要大量传输对象的地方。
+	如: 一张表有100个字段，那么对应的PO就有100个属性，但是我们界面上只要显示10个字段。
+
+VO
+	对应界面显示的数据对象。
+
+	用于表示一个与前端交换的java对象。vo只包含前端需要展示的数据即可，对于前端不需要的数据，比如数据创建和修改的时间等字段。通常遵守java Bean的规范，拥有getter/setter方法。
+DO 
+	与数据库表结构一一对应，通过DAO层向上传输数据源对象。
+
+
+POJO
+	中间对象，一个POJO持久化以后就是PO。包含POVODTO都是典型的POJO。而DAO，BO一般都不是POJO，只提供一些调用方法。
+
+	
+
+
+什么是POJO?
+	是一种没有引用任何框架的类。
+
+
+
+方法:
+	动词 + 名词
+
+
+
+
+
+
+
+
+Logbak 日志框架
+
+	<root level>  
+		用来设置日志输出基本，只有一个level属性。
+
+	<logger>节点
+		此节点用来设置一个包或具体的某一个类的日志打印级别
+
+
+
+
+
+
+
+
+
+
+
+JDBC 
+	提供一套能够应用于各种数据库的统一标准
+
+
+ 	创建DataSource获取Connection创建Statement执行SQL语句处理ResultSet关闭资源对象
+
+
+
+
+
+utf8mb4_general_ci
+
+数据持久性框架
+
+
+	JPA: 标准规范
+	JdbcTemplate是让大家能更简单地使用JDBC把一些模板式代码包装起来
+
+	Hibernate
+		彻底的ORM对象关系映射，使用Hibernat，开发者可以不考虑SQL语句的编写与执行，直接操作对象即可。
+
+		 是JPA的一种实现。
+
+		 java开发者只需要使用面向对象思维就可以完成数据库表的设计
+
+		 Hibernate API本身没有侵入性，也就是说，业务逻辑感知不到Hibernate的存在，也不需要继承任何Hibernate包中的接口
+
+		HQL 面向对象的查询语言
+
+
+		SQL 面向关系型的查询语言
+	MyBatis
+
+		需要手工编写SQL语句的。
+
+		 很重要的功能就是可以帮助java开发者封装重复性的JDBC代码.
+		 MyBatis封装重复性代码的方式是通过Mapper映射配置文件以及相关注解，将resultset结果映射为java对象。
+
+		优点:
+			更加灵活，更加轻量，更加可控
+			 可以直接编写原生SQL语句。
+			 适合大数据量，高并发。
+
+		缺点:
+			1.sql语句的编写工作量比较大，尤其是字段多，关联表多时。
+			2.sql语句依赖数据库，导致数据库移植性差，不能随意更换数据库	
+
+
+		Mapper
+			每一个Mapper都是一个DAO层接口的实现类，增删改查这些CRUD接口都是通过Mapper的实例去调用的。	
+
+
+		MyBatis三层架构: 基础支撑层，核心处理层和接口层
+			1.基础支撑层
+				类型转换，
+				日志模块(排查问题，定位BUG，锁定性能瓶颈)，反射工具，Binding模块，数据源模块，缓存模块，解析器模块，事务管理模块
+			2.核心处理层
+				涉及mybatis的初始化以及执行一条sql语句的全流程。
+				1.配置解析:
+						添加配置信息: mybatisconfig.xml配置文件，Mapper.xml配置文件以及Mapper接口中的注解信息。在mybatis初始化过程中，会加载这些配置信息，并将解析之后得到的配置对象保存到configuration对象中。
+
+			SqlSession接口，获取Mapper代理，执行SQL语句，控制事务开关等。			
+
+
+
+
+			# 和 $符号区别:
+				#:
+					 #{}表示一个占位符，相当于jdbc中的?符号，对传入的数据自动添加一个双引号。
+					 将值当做字符串形式(可以有效防止sql注入)。
+				$:
+					 将值直接显示生成sql语句。是字符串替换，如传入的值11，解析成sql时的值为where id=11。
+					 排序时使用 order by 动态参数时只能使用${}
+
+
+
+
+	SqlSessionFactoryBuilder
+		作用是创建SqlSessionFactory，
+
+		作用域:
+			方法作用域(可以被实例化，一但创建SqlSessionFactory就不再需要它了)
+
+	SqlSeesionFactory
+		可以认为是一个数据库连接池，它的作用是创建SqlSession接口对象。	
+
+		 由于sqlsessionfactory是一个数据库的连接池，如果创建多个，那么久存在多个数据库连接池，会导致数据库资源被消耗光。所以往往希望SqlSessionFactory作为一个单列，让它在应用中被共享。
+
+
+
+	SqlSession:
+		相当于一个数据库连接(类似于JDBC中的connection)，是应用程序与持久层之间交换的操作的一个单线程对象。
+		 底层封装了JDBC连接，每个线程都应该有它自己的sqlsession实例。	
+
+
+
+	Map传参优化
+		mapper.xml里传入参数可以不是接口类型，而是个map。
+
+		当实体类有很多属性，或者表里涉及很多字段时，如果还是按对象传递参数，会写很多没有用的字段，此时用Map传参更方便，mapper.xml里的sql语句的传参仅需要传入map的key即可，不需要初始化完整的实例对象。
+
+	TypeAliases (类型别名)
+		<select id="getUserList" resultType="com.jerry.pojo.User">
+			select * from hcw.user;
+		</select>		
+
+	1.给单个实体类起类别名
+		<typeAliases>
+			<typeAlias type="com.jerry.pojo.User" alias="User"/>
+		</typeAliases>
+
+		使用
+		<select id="getUserList" resultType="User">
+			select * from hcw.user;
+		</select>	
+	2.指定包名配置类型别名
+		<typeAliases>
+			// package标签里写实体类所在的包名
+			<package name="com.jerry.pojo"/>
+		</typeAliases>
+
+		<select id="getUserList" resultType="user">
+			select * from hcw.user;
+		</select>
+
+	resultMap
+		可以将查询到复杂信息，如多张表的信息，映射到一个结果集中。	
+
+
+	mybatis标签
+		trim标签
+			简单来说就是自定义格式拼凑SQL语句。
+
+			trim有4个属性:
+				1.perfix: 表示在trim包裹的SQL前添加指定内容
+				2.suffix: 表示trim包裹的SQL末尾添加指定内容
+				3.perfixOverrides: 表示去掉trim包裹的sql指定首部内容
+				4.suffixOverrides: 表示去掉trim包裹的sql指定尾部内容
+		sql 标签:
+			定义重复使用代码
+			<include>引用代码 
+
+	mybatis 动态拼接
+		需要根据各种不同的场景拼接出不同的SQL语句。这个时候就可以使用<if test="xxx"><if/>是否为null，如果不为null，则执行代码时会把条件拼接在<where> 后面。test的属性用于条件判断。
+
+	具体流程:
+		1.读取mybatis配置文件
+		2.加载映射文件
+		3.构造会话工厂
+		4.创建会话对象
+		5.执行
+
+
+
+	${}变量占位符
+		属于静态文本替换
+	#{}参数占位符	
+		将sql中的#{}替换为?号
+
+
+spring MVC的工作流程:
+	1.请求会先到前端控制器DispatcherServlet
+	2.DispatcherServlet接收到请求后会调用HandlerMapping处理器映射器。告诉该请求该由那个controller来处理
+	3.DispatcherServlet调用HandlerAdapter处理器，告诉处理器应该要去执行哪个controller
+	4.HandlerAdapter处理器适配器去执行controller并得到ModelAndView(数据和视图)，并层层返回给DispatcherServet
+	5.DispatcherServlet将ModelAndView交给ViewReslover视图解析器解析，然后返回真正的视图。
+	6.DispatcherServlet将模型数据填充到视图中
+	7.DispatcherServlet将结果响应给用户.
+
+
+
+
+Spring Data JPA
+	JPA规范本身是为了整合市面上已有的ORM框架。简化java持久层的开发
+
+
+
+
+Hibernate Sprin Data JPA对sql语句的调优，多表查询等方面不及MyBatis直接使用原生S	QL语句方便，高效.
+
+
+
+RPC 和 REST
+	RPC是面向服务的，并关注行为和动作
+	RESET是面向资源，强调描述应用程序的事务和名词
+
+
+
+
+spring Validation 参数校验
+	validation的工作原理是通过特定的注解修饰对类的字段定义约束。
+
+
+
+
+映射关系:
+	consumes/ produces 限定请求与响应格式。如: 它只接受包含特定ContentType的一些请求。对应ContentType和Accept头
+
+
+
+
+
+redis:
+
+	springboot默认为我们配置了两个redisTemplate，stringRedisTemplate继承自redistemplate<String，String>
+
+	stringRedisTemplate使用StringRedisSerializer进行序列化，而RedisTemplate默认使用JdkSerializationRedisSerializer进行序列化。
+
+
+	JdkSerializationRedisSerializer 可以直接指定返回类型，免去了再次转换之频繁
+
+
+
+
+
+
+
+
+
+
+
+
+
+spring scheduling
+	1.给启动类添加注解@EnableScheduling
+	2.创建定时类
+
+
+	字段说明:
+		fixeRate 表示任务之间的时间间隔
+		
+
+
+spring boot 测试用例:
+	@RunWith 
+		表示当前测试用例需要使用spring Bean容器进行运行。
+
+	@Test
+		标识单个测试用例
+
+
+
+
+依赖:
+	类A当中使用的类B，其中类B是作为类A的方法参数，方法中的局部变量，或者静态方法调用。
+
+关联:
+	单项关联表现为: 类A当中使用了类B，其中B作为类A的成员变量。
+	双向关联表现为: 类A当中使用了类B作为成员变量；同时类B中也使用了类A作为成员变量。
+
+
+UML图:
+	1.继承关系
+		空心三角形 + 实线
+		子类指向父类，即子类>父类
+	2.接口关系
+		空心三角形 + 虚线
+		类指向接口，类>接口	
+	3.关联关系
+		1.单向关联: 实线箭头。
+		2.双向关联: 实线。
+	4.聚合关系
+		整体对象拥有个体对象
+		空心菱角 + 实线
+		菱形连着整体对象，另一头连着个体对象。
+	5.组合关系
+		实心菱角 + 实线
+	6.依赖关系
+		虚线箭头
+				
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+A和B的运行是互相独立的，当A抛出异常时，B是无法捕获到的，因为它不在同一个线程之中运行。
+
+子线程在抛出运行异常，调用自定义的异常处理器，进行异常处理(日志打印)
+
+Thread.UncaughtExceptionHandler
+
+
+
+
+
+spring mvc kafka配置
+	1.定义配置参数
+	2.创建consumerFactory bean
+	3.具体监听的 bean
+	4.消费者容器配置信息(指定订阅主题)
+	5.配置消费者容器
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+然后选用集合:
+	根据集合特点来选用，比如我们需要根据键值获取元素值时就选用Map接口下的集合，需要排序时选用TreeMap，不需要排序时就选择HashMap，需要保证线程安全就选用ConcurrentHashMap
+
+为什么要使用集合:
+	当我们要保存相同的数据结构时，我们应该是使用应该容器来保存，这个容器就是数组，但是，使用数组存储对象具有一定的弊端，因为我们在实际开发中，存储的数据是多种多样，于是，就出现了"集合"
+
+
+数组缺点:
+	1.数据类型要一致
+	2.数组的缺点是一旦声明之后，长度就不可变了。
+
+
+
+
+
+
+
+
+对象转json字符串
+	fastjson
+		String json = JSON.toJSONString(object);
+
+	jackson:
+		ObjectMapper mapper = new ObjectMapper();
+		String result = mapper.writeValueAsString(person);
+
+json字符串转对象
+	JSON.parseObject(jsonxxx.class)	
+
+
+注解:
+	添加到java代码中的元数据；类，方法，变量，参数和包都可以用注解来修饰。注解对于它所修饰的代码并没有直接的影响。
+代理模式:
+	给某个对象提供一个代理，并由代理对象来控制对象的访问。
+
+
+	
+
+
+
+
+spring 事务
+	方式:
+		1.编程式事务: 
+			在代码中硬编码；通过TranscationTemplate或者TransactionManager手动管理事务，实际应用中很少使用。
+		2.声明式事务:
+			在XML配置文件中配置或者直接基于注解，实际是通过AOP实现(基于@Transactional的全注解方式使用)
+
+
+
+
+spring 事务传播行为:
+	事务传播行为是为了解决业务层方法直接相互调用的事务问题。
+
+	当事务方法被另一个事务方法调用时，必须指定事务应该如何传播。如:方法可能继续在现有事务中运行，也可能开启一个新事务，并在自己的事务中运行。
+
+
+	REQUIRED
+		如果当前没有事务，新建一个事务，如果已经存在一个事务，则加入到这个事务中。
+	PROPAGATION_SUPPORTS
+		如果当前存在事务，则加入该事务; 如果当前没有事务，就以非事务方式执行。
+
+	MANDATORY
+		如果当前存在事务，则加入该事务; 如果没有当前没有事务，则抛出异常。
+
+	REQUIRED_NEW	
+		创建一个新的事务，如果当前存在事务，则把当前事务挂起。这个方法会独立提交事务，不受调用者的事务影响，父级异常，它也正常提交。
+
+		bMethod()使用PROPAGATION_REQUIRES_NEW事务传播行为修饰，aMethod还是用PROPAGATION_REQUIRED修饰的话。如果aMethod()发生异常回滚，bMethod()不会跟着回滚，因为 bMethod()开启了独立的事务。但是，如果 bMethod()抛出了未被捕获的异常并且这个异常满足事务回滚规则的话aMethod()同样也会回滚，因为这个异常被 aMethod()的事务管理机制检测到了。		
+
+	NOT_SUPPORTED	
+		以非事务方式运行，如果当前存在事务，则把当前事务挂起
+
+	NEVER	
+		以非事务方式运行，如果当前存在事务，则抛出一次。
+
+	TransactionDefinition.PROPAGATION_NESTED
+		如果当前存在事务，则在嵌套事务内执行。如果当前没有事务，则执行与PROPAGATION_REQUIRED类似的操作。
+			
+
+
+事务超时属性
+	指一个事务所允许执行的最长时间，如果超过该时间限制但事务还没完成，则自动回滚事务。默认是1;
+
+只读事务:
+	指定事务类型为readonly，既只读事务。只读事务不涉及数据的修改。
+
+
+	mysql默认对每一个新建立的连接都启用了autocommit模式。在改模式下，每一个发送到mysql服务器的sql语句都会在一个单独的事务中进行处理，执行结束后会自动提交事务，并开启一个新的事务。
+
+
+	如果不加Transactional，每条sql会开启一个单独的事务，中间被其它事务改了数据，都会实时读取到最新值。
+
+	如统计查询，报表查询，多条查询sql必须保证整体的读一致性，否则，在前条sql查询之后，后条sql查询之前，数据被其他用户改变，则该次整体的统计查询将会出现读数据不一致的状态，此时，应该启用事务支持。
+
+
+
+事务回滚规则:
+	默认事务只有遇到运行时异常(RuntimeException的子类)时才会回滚，Error也会导致事务回滚，但是，在遇到检查型(Checked)异常时不会回滚
+
+		
+
+
+
+
+Spring 事务中的隔离级别:
+	TransactionDefinition.ISOLATION_DEFAULT 
+		使用后端数据库默认的隔离级别，Mysql默认采用REPEATABLE_READ
+	TransactionDefinition.ISOLATION_READ_UNCOMMITTED 
+		最低的隔离级别，读未提交的数据
+	TransactionDefinition.ISOLATION_READ_COMMITTED	
+		读已提交
+	TransactionDefinition.ISOLATION_REPEATABLE_READ
+		可重复读。对同一字段的多次读取结果都是一致的，除非数据是被本身事务自己所修改。
+	TransactionDefinition.ISOLATION_SERIALIZABLE
+		最高的隔离级别。串行化。			
+
+
+
+spring 事务可见性:
+	@Transactional注解只应用到public修饰的方法上，在protected，private修饰的方法上都不会起作用。
+
+	2.一个类中假设方法A使用了注解@Transactional，同一个类中的方法B再去条用方法A时，事务不生效
+
+
+
+
+	在代理模式下，仅拦截通过代理类传入的外部方法调用。
+
+
+
+	事务是通过AOP动态代理机制实现的，它会给类生成一个代理类，事务的相关操作都在代理类上完成。内部方式使用this调用方式，使用的是实例调用，并没有通过代理类调用方法，所以会导致事务失效。也就是说调用必须来自外部。
+
+
+
+
+@Transactional注解
+	当使用@Transactional注解时，Spring boot会隐式创建一个代理，该代理将创建与数据库的连接。代码执行无误后，将启动并提交事务。如果发生异常，它将回滚更改。
+
+
+	@Transactional(rollbackFor=Exception.class)
+	可以让事务在遇到非运行时异常时也回滚。
+
+
+
+
+
+
+
+
+Spring 事务管理接口:
+	PlatformTransacationManager
+		事务管理器，spring事务策略的核心
+	TransactionDefinition
+		事务定义信息(事务管理级别，传播行为，超时，只读，回滚规则)
+	TransactionStatus
+		事务运行状态		
+
+
+事务属性:
+	隔离级别
+	传播行为
+	回滚规则
+	是否只读
+	事务超时
+
+
+
+
+
+
+TransactionDefinition.PROPAGATION_REQUIRED
+	如果当前存在事务，则加入该事务；如果当前没有事务，则创建一个新的事务:
+		1.如果外部方法没有开启事务的话，Propagation.REQUIRED修饰的内部方法会新开启自己的事务，且开启的事务互相独立，互不干扰。
+		2.如果外部方法开启事务并且被Propagation.REQUIRED的话，所有的Propagation.REQUIRED修饰的内部方法和外部方法均属于同一事务，只要一个方法回滚，整个事务均回滚。
+
+
+
+		如aMethod()和bMethod()使用的都是PROPAGATION_REQUIRED传播行为的话，两者使用的就是同一个事务，只要其中一个方法回滚，整个事务均回滚。
+
+
+事务实操总结
+	1)
+		A 方法调用B方法，a开启事务，b没开启，A方法或B方法出错，B事务回滚。
+
+	2)
+		A 方法调用B方法，B方法开启事务，A执行失败，B不会回滚
+
+	3)
+		A 方法调用B方法，A和B同时开启事务，A代码中tryB的调用，如果B执行出错不会回滚，因为被catch住了。
+		使用try，catch的时候，catch里面需要加上TransactionAspectSupport.currentTransactionStatus().setRollbackOnly() 既B方法执行出错回滚。
+
+
+
+
+
+
+
+
+Spring AOP和 AspectJ AOP区别
+	Spring AOP属于运行时增强，而AspectJ是编译时增强。
+
+	Spring AOP基于代理 AspectJ基于字节码操作
+
+
+什么是bean?
+	bean代指哪些被IOC容器所管理的对象。
+
+	我们需要告诉IOC容器帮助我们管理哪些对象，可以是xml文件，注解或者java配置类.
+	<! Constructorarg with 'value' attribute >
+	<bean id="..." class="...">
+   		<constructorarg value="..."/>
+	</bean>
+
+	org.springframework.beans和org.springframework.context这两个包是IOC实现的基础。
+
+
+
+bean的作用域:
+	singleton:
+		默认都是单列的。
+	prototype
+		每次请求都会创建一个新的bean实例
+	request
+		每一次HTTP请求都会产生一个新的bean，该bean仅在当前http request内有效
+	session
+		每次来自信的session的http请求都会产生一个新的bean，该bean仅在当前http session内有效
+	globalsession
+		全局session作用域。
+
+
+
+
+
+
+
+三级缓存
+	singletonObjects 一级缓存，存放完整的Bean
+	earlySingletonObjects 二级缓存，存放提前暴露的Bean，Bean是不完整的，未完成属性注入和执行init方法
+	singLetonFactories 三级缓存，存放的是Bean工厂，主要是生产Bean，存放到二级缓存中。
+
+
+	所有被Spring管理的Bean，最终都会存放在singletonObjects中
+
+
+
+
+
+
+Shiro
+
+	subject 
+		主体，记录当前操作用户。
+		访问系统的用户，主体可以是用户，程序等。
+	Principal
+		身份信息，如用户名，手机号，邮箱等。一个主体可以有多个身份，但是必须有一个主身份。
+
+	Credential 凭证信息
+		密码，证书。		
+
+
+
+
+
+
+	securityManager 安全管理器，可以完成对subject的认证，授权等。
+
+
+	Authenticator认证器
+		对用户身份进行认证
+	Authorizer授权器
+		用户通过认证器认证通过，在访问功能时需要通过授权器判断用户是否有权限操作。	
+	Realm领域
+		获取用户权限数据，比如: 如果用户身份数据在数据库你们realm就需要数据库获取用户身份信息。
+
+
+								
+Eureka Client
+	声明客户端两种方式
+		@EnableDiscoveryClient
+		@EnableEurekaClient
+		
+
+
+@FeignClient
+	注解用来指定这个接口所需要调用的服务名称，
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+

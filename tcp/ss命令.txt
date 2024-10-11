@@ -1,0 +1,18 @@
+ss -ltnp
+
+接收队列(Recv-Q)  发送队列(Send-Q) 
+
+Established:
+- Recv-Q 表示套接字缓冲还没有被应用程序取走的字节数(即接收队列长度)
+- Send-Q 表示还没有被远端主机确认的字节数(即发送队列长度)
+
+Listening:
+- Recv-Q 表示syn backlog的当前值
+- Send-Q 表示最大的syn backlog值
+
+syn backlog是TCP协议栈中的半连接队列长度
+
+
+
+PPS:
+	表示以网络包为单位的传输速率。PPS通常用来评估网络的转发能力。

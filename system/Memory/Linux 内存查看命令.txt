@@ -1,0 +1,75 @@
+Linux 内存查看命令:
+
+# free 查看内存使用率。我通常都是使用free -m (m代表以MB单位显示)
+
+free -m  （显示是Centos 6x版本）
+             total       used       free     shared    buffers     cached
+Mem:           996        443        553          0         71        208
+-/+ buffers/cache:        162        833 
+Swap:         2047          0       2047 
+
+- total 内存总大小 
+- used  已使用大小 (注:这里的使用大小、并不代表真正使用的内存大小)
+- free  剩余内存
+- shared 共享内存
+- buffers 对磁盘数据的缓存
+- cached  对文件数据的缓存
+
+实际内存占用和剩余内存:
+    -/+ buffers/cache:        162        833
+	used = user - buffers - cache 
+	free = free + buffers + cached 
+
+	- 刚刚说used并不代表真正使用内存大小、原因是因为Linux为了高效利用内存、会将一些临时数据(如cat一个文件)放到buffers和cached、而buffers和cached在内存使用的过程中、可以随时被释放。
+
+    - buffer是对磁盘数据的缓存(文件系统元数据)
+    - cache是文件数据的缓存、它们即会用在读请求中、也会用在写请求中
+
+   
+
+# 查看进程使用内存大小:
+
+	- top  按M键   然后查看RES字段、单位是千字节。
+		VIRT: 是进程虚拟内存的大小、只要是申请过的内存、即便还没有真正分配物理内存、也会计算在内。
+		RES: 是常驻内存的大小、也就是进程实际使用的物理内存大小、但不包括Swap和共享内存。
+		SHR: 是共享内存大小、比如与其他进程共同使用的共享内存、加载的动态链接库以及程序代码段等。
+		%MEM: 是进程使用物理内存占系统总内存的百分比
+
+查看某进程使用物理内存大小:
+	- cat /proc/xxx/smaps |grep Pss |awk '{sum+=$2} END {print sum}' 
+查看所有进程物理内存占用:
+	- grep Pss /proc/[1-9]*/smaps | awk '{total+=$2}; END {printf "%d kB\n", total }'
+
+
+# ps -eo pid,comm,pmem --sort -rss |head  查看占用内存最多的进程、加上head命令是取前十
+
+
+
+
+
+
+
+linux sar命令:
+	sar -r
+
+	kbmemfree: 可用内存，千字节为单位
+	kbmemused: 已用内存
+	%memused: 已用内存的百分百
+	kbbuffers: 内核用作缓冲区的内存
+	kbcached: 内核用于缓存数据的内存量
+	kbcommit: 当前所需要的内存量。估计需要多少RAM/交换以保证永远不会有内存不足的估计。确保该数字始终小于可用的RAM
+	%commit: 当前工作负载所需要的内存占用总量。
+
+
+
+
+
+
+
+
+
+
+
+
+
+
